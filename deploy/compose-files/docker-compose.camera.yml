@@ -1,0 +1,32 @@
+services:
+  camera:
+    image: ${DOCKER_TAG_PREFIX}_module_camera:${DEPLOY_VERSION}
+    environment:
+      - LOGLEVEL=DEBUG
+      - MODULE_NAME=Camera
+      - CONFIG_DIR=${DB_CONFIG_DIRECTORY}
+      - DATA_DIR=${DB_DATA_DIRECTORY}
+      - DEPLOY_VERSION=${DEPLOY_VERSION}
+      - DB_ID=${DB_ID}
+      - DB_ROUTER=zmq_router
+      - DB_ROUTER_FRONTEND_PORT=${DB_ROUTER_FRONTEND_PORT}
+      - DB_ROUTER_BACKEND_PORT=${DB_ROUTER_BACKEND_PORT}
+      - DB_ROUTER_SUB_PORT=${DB_ROUTER_SUB_PORT}
+      - DB_ROUTER_PUB_PORT=${DB_ROUTER_PUB_PORT}
+      - CAMERA_PATH=/dev/video0
+    volumes:
+      - ${ROOT_DIR}/config:${DB_CONFIG_DIRECTORY}
+      - ${ROOT_DIR}/data:${DB_DATA_DIRECTORY}
+      # Note: on multi-webcam setups ensure that they are always linked to the correct devices
+      #       e.g. using  "ln -s /dev/v4l/by-path/pci-0000\:00\:14.0-usb-0\:9\:1. /opt/databeam/video/webcam0"
+      #       and mapping via:
+      #       - WEBCAM_PATH=/dev/video0
+    devices:
+      - /opt/databeam/video/webcam0:/dev/video0
+    depends_on:
+      controller:
+        condition: service_healthy
+    networks:
+      - internal_nw
+    restart: unless-stopped
+    stop_grace_period: 20s

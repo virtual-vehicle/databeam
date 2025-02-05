@@ -1,0 +1,15 @@
+[Unit]
+Description=Data.Beam Main Application
+Requires=docker.service network.target local-fs.target databeam_hostcmd.service
+After=docker.service network.target local-fs.target databeam_hostcmd.service
+
+[Service]
+Type=notify
+WorkingDirectory=/opt/databeam/deploy
+ExecStart=/opt/databeam/deploy/databeam_run.sh start
+ExecStop=/opt/databeam/deploy/databeam_run.sh stop
+NotifyAccess=main
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,3 @@
+# install additional core-dependencies via deploy/requirements_core.txt
+
+-i https://pypi.org/simple

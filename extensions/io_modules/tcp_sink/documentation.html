@@ -1,0 +1,30 @@
+<h2>Description</h2>
+<p>
+    A module to receive data over a TCP connection. Allows for bytestream or json formatted data and can be set
+    to receive as a server or a client.
+</p>
+
+<h2>Configuration</h2>
+<ul>
+    <li><b>TCP Address:</b> The TCP address to use. In server mode it defines the address to listen on,
+                            in client mode the address to connect to.</li>
+    <li><b>TCP Port:</b> The TCP port to use with the address.</li>
+    <li><b>Client Mode:</b> Can be set to put the module in client mode, where it creates a TCP client and connects
+                            to a TCP server. Otherwise, it creates a TCP server where one client can connect and
+                            send its data to. </li>
+    <li><b>Use Length Bytes:</b> Toggle this, if the data sender sends the length of each data packet before the data
+                                 itself. Allows for more robust data transfer.</li>
+    <li><b>Number Length Bytes:</b> If a length byte is used, this field defines how many bytes the length uses.</li>
+    <li><b>Big Endian:</b> If set, all data and the length is interpreted in big-endian.</li>
+    <li><b>Data Format:</b> Defines the type of data which is sent to the module.
+        <ul>
+            <li>struct: Expects a byte array. Please use the "Struct Entries" field to define what type of data is
+            expected.</li>
+            <li>json: Expects a json-formatted data packet. This setting ignores the "Struct Entries" field.</li>
+        </ul></li>
+    <li><b>Struct Entries:</b> If "Data format" is set to struct, this field defines the data which is expected.</li>
+</ul>
+
+<h2>Known Issues</h2>
+In server mode, when a measurement is stopped, it closes the connection to directly listen to a new one. This must be
+considered when connecting a data sender client.

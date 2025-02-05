@@ -1,0 +1,30 @@
+<h2>Description</h2>
+<p>
+    This module captures video frames from cameras that support UVC (USB Video Class).
+</p>
+
+<h2>Configuration</h2>
+<ul>
+    <li><b>Resolution:</b> Capture resolution for the camera.</li>
+    <li><b>FPS:</b> Number of video frames per second captured from the camera.</li>
+    <li><b>Codec:</b> Codec for video capture.</li>
+    <li><b>Rotation:</b> Rotation of the frame (e.g. to correct camera orientation).</li>
+    <li><b>Dot In Center Size:</b> Size of red dot in the center (0 to disable).</li>
+    <li><b>Crosshair Size:</b> Size of red crosshair (0 to disable).</li>
+    <li><b>Enable Mp4:</b> Enables writing frames to mp4 file.</li>
+    <li><b>Mp4 Interval [s]:</b> Interval in seconds to capture frames to mp4 file. A value of 0 writes every frame as given by <b>FPS</b>.</li>
+    <li><b>Enable Mcap:</b> Enables writing frames to mcap file.</li>
+    <li><b>Mcap Resolution:</b> Resolution to use for mcap frames. This should not exceed <b>Resolution</b>.</li>
+    <li><b>Mcap Interval [s]:</b> Interval in seconds to capture frames to mcap file. A value of 0 writes every frame as given by <b>FPS</b>.</li>
+    <li><b>Enable Preview:</b> Enables writing frames for preview display.</li>
+    <li><b>Preview Resolution:</b> Resolution to use for preview frames. This should not exceed <b>Resolution</b></li>
+    <li><b>Live Source:</b> Select source for live data forwarding.</li>
+</ul>
+
+<p>
+To find supported <b>Resolution</b>, <b>FPS</b> and <b>Codec</b> of the camera use
+<br><b>"v4l2-ctl -d /dev/video0 --list-formats-ext"</b> <br> where <b>/dev/video0</b> should match the video index of the connected camera.
+</p>
+
+<h2>Known Issues</h2>
+None.

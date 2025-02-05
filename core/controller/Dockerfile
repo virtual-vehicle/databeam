@@ -1,0 +1,39 @@
+ARG BUILD_IMAGE=hello-world:invalid
+ARG DEPLOY_IMAGE=hello-world:invalid
+
+FROM ${BUILD_IMAGE} AS build-image
+
+COPY ./deploy/requirements_core.txt .
+COPY ./core/controller/requirements.txt .
+RUN pip install -r requirements_core.txt -r requirements.txt
+
+
+FROM ${DEPLOY_IMAGE} AS deploy-image
+
+COPY --from=build-image /opt/venv /opt/venv
+
+# copy python dependencies
+COPY libs/python/vif/logger /python/libs/vif/logger
+COPY libs/python/vif/jobs /python/libs/vif/jobs
+COPY libs/python/vif/asyncio_helpers /python/libs/vif/asyncio_helpers
+COPY libs/python/vif/file_helpers /python/libs/vif/file_helpers
+COPY libs/python/vif/data_interface /python/libs/vif/data_interface
+COPY libs/python/vif/zmq /python/libs/vif/zmq
+COPY libs/python/vif/network /python/libs/vif/network
+COPY libs/python/vif/plot_juggler /python/libs/vif/plot_juggler
+
+# copy app
+COPY core/controller/*.py /app/
+
+# update pythonpath
+ENV PYTHONPATH="/python/libs"
+
+# Make sure we use the virtualenv:
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /app
+
+HEALTHCHECK --interval=10s --timeout=1s --retries=3 --start-period=5s --start-interval=200ms CMD nc -z localhost 1100 || exit 1
+
+# run
+CMD ["python3", "controller.py"]

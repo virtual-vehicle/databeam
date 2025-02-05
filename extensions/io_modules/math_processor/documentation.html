@@ -1,0 +1,20 @@
+<h2>Description</h2>
+<p>
+    Subscribe to any integer or float values and calculate a mathematical expression.<br>
+    Subscribed values are available as variables with configurable names.<br>
+    Expression is evaluated when new values are received from any subscription.<br>
+    <br>
+    Example: "sqrt(x) * (1.23 + v ** 2)"
+</p>
+
+<h2>Configuration</h2>
+<ul>
+  <li><b>Inputs:</b> Add subscriber channels in format module/sub_mode#channel</li>
+  <li><b>Internal Input Names:</b> Declare a variable name per input.</li>
+  <li><b>Calculation:</b> A mathematical expression. Can contain variables, operators and functions of python math lib.</li>
+  <li><b>Result Channel Name:</b> The result will be published and saved under this key.</li>
+</ul>
+
+<h2>Known Issues</h2>
+Calculation expression is not validated and will fail silently (exception).
+Expression is sanitized before being evaluated.

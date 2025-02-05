@@ -1,0 +1,34 @@
+<h2>Description</h2>
+<p>
+    PID controller with live-data input and output for real-time calculation.
+    Uses velocity algorithm.<br><br>
+    Output:
+</p>
+<ul>
+  <li><b>"output":</b> controller output value</li>
+  <li><b>"p_share":</b> proportional part of output</li>
+  <li><b>"i_share":</b> integral part of output</li>
+  <li><b>"d_share":</b> derivative part of output</li>
+  <li><b>"pv":</b> used input process value for this sample</li>
+</ul>
+
+<h2>Configuration</h2>
+<ul>
+  <li><b>Force On:</b> set output to maximum</li>
+  <li><b>K P:</b> P-gain</li>
+  <li><b>K I:</b> I-gain</li>
+  <li><b>K D:</b> D-gain</li>
+  <li><b>Period S [s]:</b> how often the controller is updated</li>
+  <li><b>Output Max:</b> maximum output value</li>
+  <li><b>Output Min:</b> minimum output value</li>
+  <li><b>Inverted:</b> either raise or lower output if input is smaller setpoint</li>
+  <li><b>Setpoint:</b> setpoint of controller</li>
+  <li><b>Input Module:</b> which module to subscribe to</li>
+  <li><b>Input Channel:</b> input channel</li>
+  <li><b>Input Sub Mode [liveall/livedec]:</b> input subscription mode</li>
+  <li><b>Input Valid Min:</b> Minimum valid input value.<br>Controller will set output to minimum if exceeded.</li>
+  <li><b>Input Valid Max:</b> Maximum valid input value.<br>Controller will set output to minimum if exceeded.</li>
+</ul>
+
+<h2>Known Issues</h2>
+None.

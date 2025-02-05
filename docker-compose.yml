@@ -1,0 +1,85 @@
+# This is the main docker-compose file for DataBeam
+name: ${DOCKER_PROJECT_TAG}
+
+services:
+  zmq_router:
+    image: ${DOCKER_TAG_PREFIX}_core_zmq_router:${DEPLOY_VERSION}
+    environment:
+      - LOGLEVEL=INFO
+      - DB_ROUTER_FRONTEND_PORT=${DB_ROUTER_FRONTEND_PORT}
+      - DB_ROUTER_BACKEND_PORT=${DB_ROUTER_BACKEND_PORT}
+      - DB_ROUTER_SUB_PORT=${DB_ROUTER_SUB_PORT}
+      - DB_ROUTER_PUB_PORT=${DB_ROUTER_PUB_PORT}
+    restart: unless-stopped
+    ports:
+      - "${DB_ROUTER_FRONTEND_PORT}:${DB_ROUTER_FRONTEND_PORT}"
+      - "${DB_ROUTER_BACKEND_PORT}:${DB_ROUTER_BACKEND_PORT}"
+      - "${DB_ROUTER_SUB_PORT}:${DB_ROUTER_SUB_PORT}"
+      - "${DB_ROUTER_PUB_PORT}:${DB_ROUTER_PUB_PORT}"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "${DB_ROUTER_BACKEND_PORT}"]
+    networks:
+      - internal_nw
+      - public_nw
+
+  controller:
+    image: ${DOCKER_TAG_PREFIX}_core_controller:${DEPLOY_VERSION}
+    environment:
+      - LOGLEVEL=DEBUG
+      - CONFIG_DIR=${DB_CONFIG_DIRECTORY}
+      - DATA_DIR=${DB_DATA_DIRECTORY}
+      - DEPLOY_VERSION=${DEPLOY_VERSION}
+      - DB_ID=${DB_ID}
+      - DB_ROUTER=zmq_router
+      - DB_ROUTER_FRONTEND_PORT=${DB_ROUTER_FRONTEND_PORT}
+      - DB_ROUTER_BACKEND_PORT=${DB_ROUTER_BACKEND_PORT}
+      - DB_ROUTER_SUB_PORT=${DB_ROUTER_SUB_PORT}
+      - DB_ROUTER_PUB_PORT=${DB_ROUTER_PUB_PORT}
+      - HOST_NAME_FILE=${HOST_NAME_FILE}
+      # - DBID_LIST=dbid/databeam.local,dbid2/databeam2.local
+    volumes:
+      - ${ROOT_DIR}/config:${DB_CONFIG_DIRECTORY}
+      - ${ROOT_DIR}/data:${DB_DATA_DIRECTORY}
+      - /etc/hostname:${HOST_NAME_FILE}
+      - /tmp/databeam_hostcmd.sock:/tmp/databeam_hostcmd.sock
+    restart: unless-stopped
+    depends_on:
+      zmq_router:
+        condition: service_healthy
+    networks:
+      - internal_nw
+    stop_grace_period: 10s
+
+  rest_api:
+    extends:
+      file: deploy/compose-files/docker-compose.rest_api.yml
+      service: rest_api
+    depends_on:
+      controller:
+        condition: service_healthy
+    environment:
+      # separate multiple usernames or passwords with '#'
+      - LOGIN_USER_NAMES=databeam
+      # generate hashes with: echo -n "p4ssWord" | sha256sum | tr -d "[:space:]-"
+      - LOGIN_PASSWORD_HASHES=37a8eec1ce19687d132fe29051dca629d164e2c4958ba141d5f4133a33f0688f  # 'default'
+
+include:
+  # - deploy/compose-files/docker-compose.autostart.yml
+  # - deploy/compose-files/docker-compose.camera.yml
+  # - deploy/compose-files/docker-compose.constant_publisher.yml
+  # - deploy/compose-files/docker-compose.gps_time_service.yml
+  # - deploy/compose-files/docker-compose.math_processor.yml
+  # - deploy/compose-files/docker-compose.nmea_gnss.yml
+  # - deploy/compose-files/docker-compose.pid_controller.yml
+  # - deploy/compose-files/docker-compose.ping.yml
+  # - deploy/compose-files/docker-compose.plotter.yml
+  # - deploy/compose-files/docker-compose.system_monitor.yml
+  # - deploy/compose-files/docker-compose.tcp_sink.yml
+  # - deploy/compose-files/docker-compose.udp_sink.yml
+  # - deploy/compose-files/docker-compose.open_scale.yml
+
+networks:
+  internal_nw:
+    internal: true
+  public_nw:
+    internal: false

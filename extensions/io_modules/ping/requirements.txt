@@ -1,0 +1,5 @@
+# install additional core-dependencies via deploy/requirements_core.txt deploy/requirements_module.txt
+
+# module-specific dependencies:
+-i https://pypi.org/simple
+pingparsing

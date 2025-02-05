@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Plotter Web Interface</title>
+    <meta name="description" content="Blalala">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="../static/css/style.css">
+    <link rel="stylesheet" href="../static/css/uPlot.min.css">
+    <link rel="stylesheet" href="../static/css/leaflet.css">
+</head>
+
+<body>
+    <div id="overlay_div_id" class="overlay-div" style="display: flex;" >
+      <h1> Plotter Down. Try to Refresh Page!</h1>
+    </div>
+
+    <div id="shadow_overlay_div_id" class="shadow-div" style="display: none;" >
+    </div>
+
+    <div class="tabs-div">
+      <div id="live_source_button_id" class="emoji-button">&#128225;</div>
+    </div>
+
+    <div id="live_source_div_id" class="side-bar-div" style="display: none;">
+      <h1> Live Data Source </h1>
+      <div id="live_data_modules_div_id" class="live-data-modules-div">
+
+      </div>
+    </div>
+
+    <div id="main_div_id" class="main-div">
+      <!--
+      <div id="right_div_id" class="plot-row">
+        <div id="plot_0_div_id" class="plot-div"> </div>
+        <div id="plot_1_div_id" class="plot-div"> </div>
+        <div id="plot_2_div_id" class="plot-div"> </div>
+      </div>
+      <div id="right_div_id" class="plot-row">
+        <div id="plot_3_div_id" class="plot-div"> </div>
+        <div id="plot_4_div_id" class="plot-div"> </div>
+      </div>
+      -->
+    </div>
+</body>
+
+<script src="../static/js/utils.js"></script>
+<script src="../static/js/module_entry.js"></script>
+<script src="../static/js/uPlot.iife.min.js"></script>
+<script src="../static/js/leaflet.js"></script>
+<script src="../static/js/plot.js"></script>
+<script src="../static/js/table_plot.js"></script>
+<script src="../static/js/line_plot.js"></script>
+<script src="../static/js/image_plot.js"></script>
+<script src="../static/js/spectrum_plot.js"></script>
+<script src="../static/js/oscilloscope_plot.js"></script>
+<script src="../static/js/map_plot.js"></script>
+<script src="../static/js/plot_window.js"></script>
+<script src="../static/js/model.js"></script>
+<script src="../static/js/view.js"></script>
+<script src="../static/js/controller.js"></script>
+
+
+</html>

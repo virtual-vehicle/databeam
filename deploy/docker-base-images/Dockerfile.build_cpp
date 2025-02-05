@@ -1,0 +1,45 @@
+ARG IMAGE=hello-world:invalid
+
+FROM ${IMAGE}
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+    gcc g++ ca-certificates make cmake ninja-build pkg-config git libcurl4-openssl-dev curl unzip \
+    && apt-get -qq -y autoclean \
+    && apt-get -qq -y autoremove \
+    && apt-get -qq -y clean
+
+# build uldaq library
+WORKDIR /
+RUN apt-get update && apt-get install -y --no-install-recommends libusb-1.0-0-dev bzip2
+RUN mkdir -p /build_uldaq
+WORKDIR /build_uldaq
+RUN curl -Lo libuldaq-1.2.1.tar.bz2 https://github.com/mccdaq/uldaq/releases/download/v1.2.1/libuldaq-1.2.1.tar.bz2
+RUN tar -xvjf libuldaq-1.2.1.tar.bz2
+RUN rm libuldaq-1.2.1.tar.bz2
+RUN mv libuldaq-1.2.1 libuldaq
+WORKDIR /build_uldaq/libuldaq
+RUN ./configure && make -j$(echo $(nproc) | awk '{ print int($1/2) }')
+# RUN make DESTDIR=/out install
+RUN make install
+
+# export libs:
+# docker build -f Dockerfile.build_cpp -t db_libbuild --build-arg IMAGE=ubuntu:$(lsb_release -sr) .
+# docker run -it --rm -v ./outdir:/out db_libbuild bash -c "cd /build_uldaq/libuldaq && make DESTDIR=/out install && chmod -R a+w /out"
+
+
+# install conan for cpp build dependencies
+WORKDIR /
+RUN apt-get update && apt-get install -y --no-install-recommends pipx
+RUN pipx ensurepath
+RUN pipx install conan
+RUN /root/.local/bin/conan profile detect --force
+
+# use libs in module-image:
+# FROM ${BUILD_IMAGE} as build-image
+# FROM ${DEPLOY_IMAGE} AS deploy-image
+# COPY --from=build-image /usr/local/lib/* /usr/local/lib/
+
+WORKDIR /

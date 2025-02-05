@@ -1,0 +1,5 @@
+# common packages to all components
+
+-i https://pypi.org/simple
+environ-config
+pyzmq

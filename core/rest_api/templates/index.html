@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>DATA.BEAM Web Interface</title>
+    <meta name="description" content="Blalala">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, maximum-scale=1.0, user-scalable=0">
+    <link rel="stylesheet" href="../static/css/style.css">
+</head>
+
+<body>
+    <div id="overlay_div_id" class="overlay-div" style="display: flex;" >
+      <h1> Data.Beam Down. Try to Refresh Page!</h1>
+    </div>
+
+    <div id="alert_overlay_div_id" class="alert-overlay-div" style="display: none;">
+      <div class="alert-box-div">
+          <h1 id="alert_header_id"> Alert </h1>
+
+          <div id="alert_message_div_id" class="alert-message-div">
+              Do you really want to delete all files?
+          </div>
+
+          <div id="alert_buttons_div_id" class="alert-buttons-div">
+          </div>
+      </div>
+    </div>
+
+    <div class="tabs-div">
+      <div class="tabs-div-left">
+        <button id="log_alert_id" class="alert-emoji-button" style="display: none;">&#128681;</button>
+        <a href="https://www.v2c2.at/databeam/" target="_blank" class="header-logo-a">
+          <img src="../static/images/db_logo_1.png" class="databeam-header-logo" id="db_header_logo_img"> 
+        </a>
+      </div>
+      
+      <div class="tabs-div-center">
+        <button id="modules_tab_button_id" class="tab-buttons" type="button">&#128225; Modules</button>
+        <button id="data_tab_button_id" class="tab-buttons" type="button">&#128196; Data</button>
+        <button id="system_tab_button_id" class="tab-buttons" type="button">&#128187; System</button>
+      </div>
+      
+      <div class="tabs-div-right">
+        <p id="db_time" class="db-time">
+          00:00:00
+        </p>
+      </div>
+    </div>
+
+    <div id="log_sidebar_div_id" class="log-side-bar-div" style="display: none;">
+      <div class="sidebar-log-flex">
+        <div class="div-flex-row-center-between">
+          <h1> Module Logs </h1>
+          <div class="files-buttons-div">
+            <button id="clear_module_log_button_id" class="files-tab-buttons" type="button">Clear</button>
+            <button id="close_module_log_button_id" class="files-tab-buttons" type="button">Close</button>
+          </div>
+        </div>
+  
+        <hr>
+
+        <div id="log_job_id" class="sidebar-logs-container">
+  
+        </div>
+      </div>
+    </div>
+
+    <div class="main-div">
+      <div class="main-left-div">
+
+        <div class="header-w-icon">
+          <h1> Sampling </h1>
+          <div id="sampling_icon_id" class="loading-icon">&#128192;</div>
+        </div>
+        
+        <div class="start-stop-div">
+          <button id="start_sampling_button_id" class="control-buttons" type="button">Start</button>
+          <button id="stop_sampling_button_id" class="control-buttons" type="button">Stop</button>
+        </div>
+
+        <div class="header-w-icon">
+          <h1> Capture </h1>
+          <div id="capture_icon_id" class="loading-icon">&#128192;</div>
+        </div>
+        
+        <div class="start-stop-div">
+          <button id="start_button_id" class="control-buttons" type="button">Start</button>
+          <button id="stop_button_id" class="control-buttons" type="button">Stop</button>
+        </div>
+
+        <h1> Tag </h1>
+        <input type="text" id="run_tag_id" name="run_tag" class="input-form" spellcheck="false">
+
+        <h1> Run ID </h1>
+        <input type="number" id="runid_id" name="run_id_name" class="input-form" spellcheck="false">
+
+        <!-- 
+        <div id="log_job_id" class="log-job-div">
+
+        </div>
+
+        <div id="job_container_id" class = "job-container-div">
+        </div>
+        -->
+      </div>
+
+      <div id="modules_div_id", class="modules-div">
+        <div id="modules_left_div_id" class="modules-left-div">
+
+          <div class="modules-left-vert">
+            
+            <div class="div-flex-row-center-between">
+              <h1> Modules </h1>
+              <button id="show_meta_button_id" class="files-tab-buttons" type="button">Hide Meta</button>
+            </div>
+
+            <div id="modules_table_div_id" class="table-div">
+              <table id="modules_table_id" class="measurement-table"></table>  
+            </div>
+          </div>
+
+          <div id="meta_div_id" class="modules-left-vert">
+            <h1> Meta </h1>
+          
+            <div id="meta_table_div_id" class="meta-table-div">
+              <table id="meta_table_id" class="measurement-table"></table>  
+            </div>
+          </div>
+
+        </div>
+
+        <div id="config_div_id" class="modules-right-div">
+          <div class="div-flex-row-center-between">
+            <h1> Config </h1>
+
+            <div class="files-buttons-div">
+                <button id="simple_config_button_id" class="files-tab-buttons" type="button">&#128295; Simple</button>
+                <button id="advanced_config_button_id" class="files-tab-buttons" type="button">&#128296; Advanced</button>
+            </div>
+          </div>
+
+          <div id="forms_config_div_id" class="forms-config-div"> </div>
+
+          <textarea id="config_inspector_id" class="config-container" spellcheck="false"> </textarea>
+
+          <h1> Actions </h1>
+
+          <div class="container-config-buttons" >
+              <button id="apply_config_button_id" class="config-buttons" type="button">Apply</button>
+              <button id="store_config_button_id" class="config-buttons" type="button">Store</button>
+              <input type="file" id="load_config_file_id" class="hidden-element">
+              <button id="load_config_button_id" class="config-buttons" type="button">Load</button>
+              <button id="default_config_button_id" class="config-buttons" type="button">Default</button>
+          </div>
+        </div>
+
+        <div id="documentation_div_id" class="modules-right-div" style="display: none;">
+          <h1> Documentation </h1>
+          <div id="module_doc_div_id" class="module-doc-div"> </div>
+        </div>
+
+        <div id="preview_div_id" class="modules-right-div" style="display: none;">
+          <h1 id="preview_header_id"> Preview </h1>
+          <div id="preview_table_div_id" class="table-div">
+            <table id="preview_table_id" class="measurement-table"></table>  
+          </div>
+          <div id="preview_img_div_id" style="display: none;">
+
+          </div>
+        </div>
+      </div>
+
+      <div id="data_div_id" class="data-div" style="display: none;">
+          <div class="data-left-div">
+            <h1> Measurements </h1>
+            <div id="measurement_table_div_id" class="table-div">
+              <table id="measurements_table_id" class="measurement-table"></table>  
+            </div>
+          </div>
+          <div id="data_actions_div_id" class="data-actions-div" style="display: none;">
+            <div class="row-button-group">
+              <button id="download_measurements_button_id" class="control-buttons" type="button">Download</button>
+              <button id="remove_measurenemts_button_id" class="control-buttons" type="button">Remove All</button>
+            </div>
+          </div>
+      </div>
+      
+
+      <div id="system_div_id" class="modules-div" style="display: none;">
+        <div i="system_left_div_id" class="data-left-div">
+          <h1> Docker Containers </h1>
+          <div class="table-div">
+            <table id="docker_table_id" class="measurement-table"></table>  
+          </div>
+
+          <div class="docker-logs-header-div">
+            <h1> Docker Logs </h1>
+            <div class="div-flex-row-center-end">
+                <div class="docker-logs-checkmark-div">
+                    <label id="docker_info_label_id" for="docker_log_info_id">Info:</label>
+                    <input type="checkbox" id="docker_log_info_id" checked>
+                </div>
+                <div class="docker-logs-checkmark-div">
+                    <label id="docker_warning_label_id" for="docker_log_warning_id">Warning:</label>
+                    <input type="checkbox" id="docker_log_warning_id" checked>
+                </div>
+                <div class="docker-logs-checkmark-div">
+                    <label id="docker_debug_label_id" for="docker_log_debug_id">Debug:</label>
+                    <input type="checkbox" id="docker_log_debug_id" checked>
+                </div>
+                <div class="docker-logs-checkmark-div">
+                    <label id="docker_error_label_id" for="docker_log_error_id">Error:</label>
+                    <input type="checkbox" id="docker_log_error_id" checked>
+                </div>
+            </div>
+        </div>
+        
+
+        <div id="docker_log_id" class="docker-log-div">
+        </div>
+
+        </div>
+        <div i="system_right_div_id" class="system-right-div">
+          <h1> Docker </h1>
+          <div class="vertical-button-group">
+            <button id="docker_restart_button_id" class="control-buttons" type="button">Restart</button>
+            <button id="docker_pull_button_id" class="control-buttons" type="button">Pull</button>
+          </div>
+
+          <h1> System </h1>
+          <div class="vertical-button-group">
+            <button id="time_sync_button_id" class="control-buttons" type="button">Synchronize Time</button>
+            <button id="reboot_button_id" class="control-buttons" type="button">Reboot</button>
+            <button id="shutdown_button_id" class="control-buttons" type="button">Shutdown</button>
+          </div>
+
+          <h1> Logs </h1>
+          <button id="docker_download_logs_button_id" class="control-buttons" type="button">Download</button>
+
+          <h1> Theme </h1>
+
+          <select id="theme_select_id">
+              <option> Light </option>
+              <option> Dark </option>
+          </select>
+        </div>
+      </div>
+    </div>
+</body>
+
+<script src="../static/js/util.js"></script>
+<script src="../static/js/container_entry.js"></script>
+<script src="../static/js/jobs.js"></script>
+<script src="../static/js/measurement_entry.js"></script>
+<script src="../static/js/module_entry.js"></script>
+<script src="../static/js/config_entry.js"></script>
+<script src="../static/js/meta_entry.js"></script>
+<script src="../static/js/model.js"></script>
+<script src="../static/js/view.js"></script>
+<script src="../static/js/controller.js"></script>
+
+</html>

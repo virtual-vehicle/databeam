@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>DATA.BEAM Web Interface</title>
+    <meta name="description" content="Blalala">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, maximum-scale=1.0, user-scalable=0">
+    <link rel="stylesheet" href="../static/css/style.css">
+</head>
+
+<style> 
+html, body {
+  margin: 0px;
+  padding: 0px;
+  background-size:auto;
+  background-repeat:no-repeat;
+  background-color: lightgray;
+}
+
+input[type=password], select {
+  width: 100%;
+  padding: 6px 10px;
+  margin: 0px;
+  display: inline-block;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+  font-size: 14px;
+  box-shadow: inset 0 1px 3px #ddd;
+}
+
+.login-div {
+    display: block;
+    margin-top: 100px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: 100px;
+    width: 400px;
+    height: 540px;
+    text-align: center;
+    background-color: whitesmoke;
+    border: 2px solid darkgrey;
+    border-radius: 5px;
+    animation-name: login-div-anim;
+    animation-duration: 0.5s;
+    animation-timing-function: ease-in-out;
+    animation-fill-mode: forwards;
+}
+
+.login-image {
+    padding-top: 20px;
+    max-width: 200px;
+    animation-name: fade-in-anim;
+    animation-duration: 0.5s;
+    animation-timing-function: ease-in-out;
+    animation-delay: 0.25s;
+    animation-fill-mode: both;
+}
+
+.login-form-div {
+    display: flex;
+    flex-direction: column;
+    padding-right: 50px;
+    padding-left: 50px;
+    text-align: center;
+    animation-name: fade-in-anim;
+    animation-duration: 0.5s;
+    animation-timing-function: ease-in-out;
+    animation-delay: 0.75s;
+    animation-fill-mode: both;
+    gap: 10px;
+}
+
+.login-header{
+    font-family: Helvetica;
+    font-size: 30px;
+    color: gray;
+    animation-name: login-header-anim;
+    animation-duration: 0.5s;
+    animation-timing-function: ease-in-out;
+    animation-delay: 0.5s;
+    animation-fill-mode: both;
+}
+
+.loading-header{
+    display: None;
+    margin-top: 50px;
+    font-family: Helvetica;
+    font-size: 30px;
+    color:gray;
+    animation-name: fade-in-anim;
+    animation-duration: 0.5s;
+    animation-timing-function: ease-in-out;
+    animation-delay: 0.0s;
+    animation-fill-mode: both;
+}
+
+.password-status{
+    font-family: Helvetica;
+    animation-name: password-status-anim;
+    animation-duration: 0.25s;
+    animation-timing-function: ease-in-out;
+    animation-fill-mode: both;
+    animation-play-state:paused;
+    animation-direction: normal;
+    color:lightcoral;
+    font-weight: bold;
+}
+
+.container-input-form{
+    display: flex;
+    flex-direction: column;
+}
+
+@media only screen and (max-width: 1024px) {
+    .login-div{
+        width: 90%;
+    }
+}
+
+@keyframes password-status-anim {
+    0%   {transform: translate(0px, 10px); opacity: 0.0}
+    100% {transform: translate(0px, 0px); opacity: 1.0}
+}
+
+@keyframes login-header-anim {
+    0%   {color: whitesmoke}
+    100% {color: gray}
+}
+
+@keyframes fade-in-anim {
+    0%   {opacity: 0.0}
+    100% {opacity: 1.0}
+}
+
+@keyframes fade-out-anim {
+    0%   {opacity: 1.0}
+    100% {opacity: 0.0}
+}
+
+@keyframes login-image-anim-rot {
+    0%   {transform: rotate(0deg)}
+    100% {transform: rotate(360deg)}
+}
+
+@keyframes login-div-anim {
+    0%   {transform: translate(0px, 100px); opacity: 0.0}
+    100% {transform: translate(0px, 0px); opacity: 1.0}
+}
+
+@keyframes login-div-anim-rev {
+    0%   {transform: translate(0px, 0px); opacity: 1.0}
+    100% {transform: translate(0px, 100px); opacity: 0.0}
+}
+
+</style>
+
+<body>
+    <div id="login_div_id" class="login-div">
+        <img src="../static/images/databeam-icon-rgba.png" id="login_image_id" class="login-image" alt="Logo">
+
+        <div id="login_header_id" class = login-header>
+            Login
+        </div>
+        
+        <div id="login_form_div_id" class="login-form-div">
+            <form id="user_form_id" class="container-input-form" onsubmit="loginSubmit(event)">
+                <h1> User </h1>
+                <input type="text" id="user_input_id" class="input-form" spellcheck="false" placeholder="Name" autocomplete="username">
+                <h1> Password </h1>
+                <input type="password" id="password_input_id" class="input-form" spellcheck="false" placeholder="Password" autocomplete="current-password">
+                <button id="login_button_id" class="control-buttons" type="submit" style="margin-top: 20px;">Login</button>
+            </form>
+        </div>
+        
+        <p id="status_id" class="password-status">
+            
+        </p>
+
+            <h3 id="loading_id" class="loading-header">
+                Loading
+            </h3>
+    </div>
+</body>
+
+<script src='../static/js/libs/forge-sha256.min.js'></script>
+
+<script>
+    function buf2hex(buffer) 
+    {
+        return Array.prototype.map.call(new Uint8Array(buffer), x => ('00' + x.toString(16)).slice(-2)).join('');
+    }
+
+    function get_url_http()
+    {
+        let host = window.location.hostname
+        let port = window.location.port
+
+        if(host == "")
+        {
+            host = "localhost"
+            port = "5000"
+        }
+
+        //create databeam url string
+        return "http://" + host + ":" + port + "/"
+    }
+
+    function ready_timer()
+    {
+        //fade out login div
+        let login_div = document.getElementById("login_div_id")
+        login_div.style.animationName = "login-div-anim-rev"
+        login_div.style.animationPlayState = "running"
+
+        //redirect to databeam webinterface on animation end
+        login_div.addEventListener('animationend', () => {
+            console.log('Login Done');
+            window.location.href = get_url_http()
+        });
+    }
+
+    function loginSubmit(event) 
+    {
+        //prevent reload
+        event.preventDefault()
+
+        //create databeam url string
+        let url_http = get_url_http()
+
+        //log url
+        console.log("URL: " + url_http)
+
+        //get the password from the form element
+        let user_name = document.getElementById('user_input_id').value
+        let p = document.getElementById('password_input_id').value
+
+        //create array buffer from password string
+        let input_bytes = new TextEncoder().encode(p);
+
+        let hash_hex = forge_sha256(p)
+        console.log(hash_hex)
+        
+        //fetch login padding
+        fetch(url_http + "login_padding")
+        .then(response => response.json())
+        .then(padding => {
+            console.log("padding: " + padding.login_padding)
+            //send password hash as hex string
+            fetch(url_http + "login", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({user: user_name, password: forge_sha256(hash_hex + padding.login_padding)}),
+            })
+            .then(response => response.json())
+            .then(data => {
+                //log the response
+                console.log("Response " + JSON.stringify(data))
+
+                //check login response
+                if(data.login == "ok")
+                {
+                    //fade out login form
+                    let login_form_div = document.getElementById("login_form_div_id")
+                    login_form_div.style.animationDelay = "0.0s"
+                    login_form_div.style.animationName = "fade-out-anim"
+                    login_form_div.style.animationPlayState = "running"
+
+                    //fade out login header
+                    let login_header = document.getElementById("login_header_id")
+                    login_header.style.animationDelay = "0.25s"
+                    login_header.style.animationName = "fade-out-anim"
+                    login_header.style.animationPlayState = "running"
+
+                    //fade out login status
+                    let status = document.getElementById("status_id")
+                    status.style.animationDelay = "0.5s"
+                    status.style.animationName = "fade-out-anim"
+                    status.style.animationPlayState = "running"
+
+                    status.addEventListener('animationend', () => {
+                        //disable login header, form and status
+                        login_form_div.style.display = "None"
+                        login_header.style.display = "None"
+                        status.style.display = "None"
+
+                        //display loading header
+                        let loading_header = document.getElementById("loading_id")
+                        loading_header.style.display = "block"
+
+                        //start timer
+                        let query_interval_id = 0
+                        clearInterval(query_interval_id)
+                        query_interval_id = setInterval(() => ready_timer(), 500);
+                    });
+                }
+                else
+                {
+                    //password was invalid, log and display message
+                    console.log("Invalid Password")
+                    let status = document.getElementById('status_id');
+                    status.style.animationPlayState = "running"
+                    status.innerHTML = "User or Password invalid."
+                }
+            })
+        });
+    }
+</script>
+
+</html>

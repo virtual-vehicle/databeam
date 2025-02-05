@@ -1,0 +1,24 @@
+<h2>Description</h2>
+<p>
+    A module to receive data over a UDP connection. Allows for bytestream or json formatted data.
+</p>
+
+<h2>Configuration</h2>
+<ul>
+    <li><b>UDP Address:</b> The UDP address to listen to.</li>
+    <li><b>UDP Port:</b> The UDP port to use with the address.</li>
+    <li><b>Use Length Bytes:</b> Toggle this, if the data sender sends the length of each data packet before the data
+                                 itself. Allows for more robust data transfer.</li>
+    <li><b>Number Length Bytes:</b> If a length byte is used, this field defines how many bytes the length uses.</li>
+    <li><b>Big Endian:</b> If set, all data and the length is interpreted in big-endian.</li>
+    <li><b>Data Format:</b> Defines the type of data which is sent to the module.
+        <ul>
+            <li>struct: Expects a byte array. Please use the "Struct Entries" field to define what type of data is
+            expected.</li>
+            <li>json: Expects a json-formatted data packet. This setting ignores the "Struct Entries" field.</li>
+        </ul></li>
+    <li><b>Struct Entries:</b> If "Data format" is set to struct, this field defines the data which is expected.</li>
+</ul>
+
+<h2>Known Issues</h2>
+None.

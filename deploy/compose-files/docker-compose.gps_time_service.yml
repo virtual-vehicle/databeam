@@ -1,0 +1,16 @@
+services:
+  gpsd_timesync:
+    image: ${DOCKER_TAG_PREFIX}_system_gpsd_timesync:${DEPLOY_VERSION}
+    network_mode: host
+    privileged: true
+    volumes:
+      - /dev:/dev
+    environment:
+      - GPS_BAUDRATE=115200
+      - GPS_SOURCE=/dev/serial/by-id/usb-FTDI_FT230X_Basic_UART_DT0441BH-if00-port0
+      # PPS_SOURCE is optional 
+      - PPS_SOURCE=/dev/pps1
+      # GPSD_TCP_PORT is only needed if data should be forwarded to gpsd_client
+      - GPSD_TCP_PORT=2947
+    restart: unless-stopped
+    stop_grace_period: 20s

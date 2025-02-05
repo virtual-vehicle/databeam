@@ -1,0 +1,5 @@
+# commonly used packages in extensions/modules
+
+-i https://pypi.org/simple
+jsonschema
+mcap

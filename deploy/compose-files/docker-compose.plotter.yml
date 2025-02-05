@@ -1,0 +1,29 @@
+services:
+  plotter:
+    image: ${DOCKER_TAG_PREFIX}_module_plotter:${DEPLOY_VERSION}
+    environment:
+      - LOGLEVEL=DEBUG
+      - CONFIG_DIR=${DB_CONFIG_DIRECTORY}
+      - DATA_DIR=${DB_DATA_DIRECTORY}
+      - DEPLOY_VERSION=${DEPLOY_VERSION}
+      - DB_ID=${DB_ID}
+      - DB_ROUTER=zmq_router
+      - DB_ROUTER_FRONTEND_PORT=${DB_ROUTER_FRONTEND_PORT}
+      - DB_ROUTER_BACKEND_PORT=${DB_ROUTER_BACKEND_PORT}
+      - DB_ROUTER_SUB_PORT=${DB_ROUTER_SUB_PORT}
+      - DB_ROUTER_PUB_PORT=${DB_ROUTER_PUB_PORT}
+      - MODULE_NAME=Plotter
+    volumes:
+      - ${ROOT_DIR}/config:${DB_CONFIG_DIRECTORY}
+      - ${ROOT_DIR}/data:${DB_DATA_DIRECTORY}
+    ports:
+      - "6010:6010"
+      - "6011:6011"
+    depends_on:
+      controller:
+        condition: service_healthy
+    networks:
+      - internal_nw
+      - public_nw
+    restart: unless-stopped
+    stop_grace_period: 20s

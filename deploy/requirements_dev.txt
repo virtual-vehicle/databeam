@@ -1,0 +1,3 @@
+# usefull packages in a development venv
+
+-i https://pypi.org/simple
