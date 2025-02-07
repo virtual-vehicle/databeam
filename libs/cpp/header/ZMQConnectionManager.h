@@ -27,6 +27,8 @@ public:
 private:
     void queryable_worker();
     void subscribe_worker();
+    void stop_subscribe_thread();
+    void start_subscribe_thread();
     bool receive_multipart(zmq::socket_t* zmq_socket, std::string* parts, unsigned int num_parts);
     std::string generate_uuid();
 

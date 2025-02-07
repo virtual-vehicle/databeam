@@ -4,7 +4,7 @@ import zmq.asyncio
 from vif.network.network import resolve_uri
 
 
-def create_connect(uri: str, zmq_instance, mode, identity=b'', resolve=True, timeout_ms: int = -1) -> zmq.Socket:
+def create_connect(uri: str, zmq_instance, mode, identity=b'', resolve=False, timeout_ms: int = -1) -> zmq.Socket:
     """
     Create a zmq socket connecting to an uri
     :param uri: the uri to connect to
@@ -30,7 +30,7 @@ def create_connect(uri: str, zmq_instance, mode, identity=b'', resolve=True, tim
     return sock
 
 
-def create_bind(uri: str, zmq_instance, mode, resolve=True, timeout_ms: int = -1) -> zmq.Socket:
+def create_bind(uri: str, zmq_instance, mode, resolve=False, timeout_ms: int = -1) -> zmq.Socket:
     """
     Create a zmq socket binding to an uri
     :param uri: the uri to bind to

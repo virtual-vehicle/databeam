@@ -2,7 +2,7 @@
 mcap/[>=1.2.1]
 nlohmann_json/[>=3.10.5]
 rapidjson/cci.20230929
-cppzmq/4.10.0
+cppzmq/[>=4.10.0]
 
 [tool_requires]
 

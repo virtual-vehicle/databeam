@@ -8,6 +8,11 @@ ROOT_DIR="$SCRIPT_DIR/../.."
 
 source $ROOT_DIR/deploy/scripts/helpers.sh
 
+print_headline "This script will install system dependencies for the developer environment.\n(inspect deploy/scripts/developer_init.sh for details)"
+if ! askNoYes "Do you want to continue?" ; then
+    exit 0
+fi
+
 print_headline "installing dependencies ..\nplease provide sudo password if needed"
 sudo apt-get update
 

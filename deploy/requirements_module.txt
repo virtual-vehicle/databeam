@@ -3,3 +3,4 @@
 -i https://pypi.org/simple
 jsonschema
 mcap
+orjson

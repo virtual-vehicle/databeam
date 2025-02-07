@@ -364,6 +364,7 @@ class ConnectionManager(LoggerMixin):
     def set_external_databeams(self, db_ids: List[str], hostnames: List[str]):
         if len(db_ids) != len(hostnames):
             raise ValueError('db_ids and hostnames must have the same length')
+        self.logger.info('adding %d external databeams: %s %s', len(db_ids), db_ids, hostnames)
         self._dbid_hostnames = dict(zip(db_ids, hostnames))
 
     def _add_external_router_connection(self, db_id: str):

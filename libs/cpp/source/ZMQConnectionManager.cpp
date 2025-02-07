@@ -68,13 +68,19 @@ ZMQConnectionManager::ZMQConnectionManager(EnvConfig* env_config, std::string no
 
     //start worker threads
     this->queryable_thread = std::thread(&ZMQConnectionManager::queryable_worker, this);
-    this->subscribe_thread = std::thread(&ZMQConnectionManager::subscribe_worker, this);
+    start_subscribe_thread();
 }
 
 ZMQConnectionManager::~ZMQConnectionManager()
 {
     //log shutdown
     logger->debug(log_prefix + std::string("Shutdown"));
+
+    //kill and join threads
+    logger->debug(log_prefix + std::string("Joining threads."));
+    queryable_thread_kill_flag = true;
+    queryable_thread.join();
+    stop_subscribe_thread();
 
     //unsubscribe all
     std::unordered_map<std::string, std::vector<INetworkSubscriber*>>::iterator it;
@@ -83,13 +89,6 @@ ZMQConnectionManager::~ZMQConnectionManager()
     {
         subscribe_socket->set(zmq::sockopt::unsubscribe, it->first);
     }
-
-    //kill and join threads
-    logger->debug(log_prefix + std::string("Joining threads."));
-    queryable_thread_kill_flag = true;
-    subscribe_thread_kill_flag = true;
-    queryable_thread.join();
-    subscribe_thread.join();
 
     //log socket closing
     logger->debug(log_prefix + std::string("Closing sockets."));
@@ -120,6 +119,19 @@ ZMQConnectionManager::~ZMQConnectionManager()
 
     //log done
     logger->debug(log_prefix + std::string("Connection Manager done!"));
+}
+
+void ZMQConnectionManager::start_subscribe_thread()
+{
+    subscribe_thread_kill_flag = false;
+    this->subscribe_thread = std::thread(&ZMQConnectionManager::subscribe_worker, this);
+}
+
+void ZMQConnectionManager::stop_subscribe_thread()
+{
+    subscribe_thread_kill_flag = true;
+    subscribe_thread.join();
+    subscribe_thread_kill_flag = false;
 }
 
 void ZMQConnectionManager::queryable_worker()
@@ -156,7 +168,7 @@ void ZMQConnectionManager::queryable_worker()
         }
         else
         {
-            logger->debug(log_prefix + std::string("Received query for undeclared topic:") + parts[2]);
+            logger->error(log_prefix + std::string("Received query for undeclared topic: ") + parts[2]);
         }
 
         //release queryable lock
@@ -175,7 +187,7 @@ void ZMQConnectionManager::subscribe_worker()
         if(!receive_multipart(subscribe_socket, parts, 2)) continue;
 
         //acquire subscription lock
-        subscribe_lock.lock();
+        //subscribe_lock.lock();
 
         //search for subscriber list in subscriber map with topic as key
         std::unordered_map<std::string, std::vector<INetworkSubscriber*>>::const_iterator it;
@@ -191,7 +203,7 @@ void ZMQConnectionManager::subscribe_worker()
         }
 
         //release subscription lock
-        subscribe_lock.unlock();
+        //subscribe_lock.unlock();
     }
 }
 
@@ -268,7 +280,7 @@ std::string ZMQConnectionManager::query(std::string identity, std::string topic,
         elapsed_time = ((double)((uint64_t)time_source.now() - start_time)) * 0.000000001;
     }
 
-    logger->debug("Query Timeout.");
+    logger->warning("Query Timeout.");
     query_lock.unlock();
     return "";
 }
@@ -301,6 +313,9 @@ void ZMQConnectionManager::subscribe(std::string key, INetworkSubscriber* subscr
     //acquire subscription lock
     subscribe_lock.lock();
 
+    //stop the subscribe thread
+    stop_subscribe_thread();
+
     //find key in subscriber map
     std::unordered_map<std::string, std::vector<INetworkSubscriber*>>::iterator it;
     it = subscriber_map.find(key);
@@ -321,6 +336,9 @@ void ZMQConnectionManager::subscribe(std::string key, INetworkSubscriber* subscr
         }
     }
 
+    //start subscribe thread again
+    start_subscribe_thread();
+
     //release subscription lock
     subscribe_lock.unlock();
 }
@@ -329,6 +347,9 @@ void ZMQConnectionManager::unsubscribe(std::string key, INetworkSubscriber* subs
 {
     //acquire subscription lock
     subscribe_lock.lock();
+
+    //stop the subscribe thread
+    stop_subscribe_thread();
 
     //find key in subscriber map
     std::unordered_map<std::string, std::vector<INetworkSubscriber*>>::iterator it;
@@ -363,6 +384,9 @@ void ZMQConnectionManager::unsubscribe(std::string key, INetworkSubscriber* subs
 
     //log error if interface was not found
     if(!found) logger->error(std::string("Could not unsubscribe interface for key ") + key);
+
+    //start subscribe thread again
+    start_subscribe_thread();
 
     //release subscription lock
     subscribe_lock.unlock();

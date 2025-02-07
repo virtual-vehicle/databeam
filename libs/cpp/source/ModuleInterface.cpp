@@ -42,8 +42,6 @@ ModuleInterface::ModuleInterface(IOModule* io_module, EnvConfig* env_config, Log
   this->connection_manager = (ConnectionManager*) 
     new MultiConnectionManager(env_config, env_config->get("DB_ID") + "/m/" + module_name, env_config->get("DB_ROUTER"), logger);
 
-  sleep(1);
-
   //init job manager
   job_manager.init(this->connection_manager, env_config->get("DB_ID"), logger);
 
@@ -71,7 +69,7 @@ ModuleInterface::ModuleInterface(IOModule* io_module, EnvConfig* env_config, Log
   //fetch external databeams list
   ExternalDataBeamQuery databeam_query;
   std::string reply_data = connection_manager->query(
-    env_config->get("DB_ID") + "/c", "/databeam_registry", databeam_query.serialize());
+    env_config->get("DB_ID") + "/c", "databeam_registry", databeam_query.serialize());
   
   if(reply_data != "")
   {
@@ -89,15 +87,15 @@ ModuleInterface::ModuleInterface(IOModule* io_module, EnvConfig* env_config, Log
 
   //declare queryables and subscribers
   logger->debug("Connect: Declare queryables and subscribers.");
-  connection_manager->declare_queryable("/ping", this);
-  connection_manager->declare_queryable("/config", this);
-  connection_manager->declare_queryable("/config_event", this);
-  connection_manager->declare_queryable("/data_config", this);
-  connection_manager->declare_queryable("/sampling", this);
-  connection_manager->declare_queryable("/get_docu", this);
-  connection_manager->declare_queryable("/prepare_sampling", this);
-  connection_manager->declare_queryable("/prepare_capture", this);
-  connection_manager->declare_queryable("/get_latest", this);
+  connection_manager->declare_queryable("config", this);
+  connection_manager->declare_queryable("config_event", this);
+  connection_manager->declare_queryable("data_config", this);
+  connection_manager->declare_queryable("sampling", this);
+  connection_manager->declare_queryable("get_docu", this);
+  connection_manager->declare_queryable("prepare_sampling", this);
+  connection_manager->declare_queryable("prepare_capture", this);
+  connection_manager->declare_queryable("get_latest", this);
+  connection_manager->declare_queryable("ping", this);
   connection_manager->subscribe(env_config->get("DB_ID") + "/m/" + module_name + "/event_in", this);
   connection_manager->subscribe(env_config->get("DB_ID") + "/c/bc/capture", this);
   connection_manager->subscribe(env_config->get("DB_ID") + "/c/bc/sampling", this);
@@ -197,7 +195,7 @@ void ModuleInterface::wait_for_controller()
   while(!signal_received)
   {
     logger->debug("Ping Controller");
-    reply_payload = connection_manager->query(env_config->get("DB_ID") + "/c", "/ping", payload);
+    reply_payload = connection_manager->query(env_config->get("DB_ID") + "/c", "ping", payload);
 
     if(reply_payload.size() > 0)
     {
@@ -206,7 +204,7 @@ void ModuleInterface::wait_for_controller()
     }
     else
     {
-      logger->debug(std::string("Wait For Controller: No Response"));
+      logger->error(std::string("Wait For Controller: No Response"));
       sleep(1);
     }
   }
@@ -223,7 +221,7 @@ void ModuleInterface::register_module()
 
   //send message to controller and get reply
   std::string reply_payload;
-  reply_payload = connection_manager->query(env_config->get("DB_ID") + "/c", "/module_registry", message_str);
+  reply_payload = connection_manager->query(env_config->get("DB_ID") + "/c", "module_registry", message_str);
 
   //check reply status
   if(reply_payload.size() > 0)
@@ -258,7 +256,7 @@ void ModuleInterface::unregister_module()
 
   //send message to controller and get reply
   std::string reply_payload;
-  reply_payload = connection_manager->query(env_config->get("DB_ID") + "/c", "/module_registry", message_str);
+  reply_payload = connection_manager->query(env_config->get("DB_ID") + "/c", "module_registry", message_str);
 
   //check reply status
   if(reply_payload.size() > 0)
@@ -387,12 +385,12 @@ void ModuleInterface::notify_subscriber(std::string key, std::string payload)
 //void ModuleInterface::queryable_handler(z_loaned_query_t* query, std::string key, std::string payload)
 std::string ModuleInterface::notify_queryable(std::string topic, std::string payload)
 {
-  if(topic == "/ping")
+  if(topic == "ping")
   {
     std::string reply("pong");
     return reply;
   }
-  else if(topic == "/data_config")
+  else if(topic == "data_config")
   {
     //parse message
     ModuleDataConfigQuery data_config_query;
@@ -422,7 +420,7 @@ std::string ModuleInterface::notify_queryable(std::string topic, std::string pay
       logger->debug("DataConfig UNSPECIFIED");
     }
   }
-  else if(topic == "/config")
+  else if(topic == "config")
   {
     //parse message
     ModuleConfigQuery module_config_query;
@@ -474,7 +472,7 @@ std::string ModuleInterface::notify_queryable(std::string topic, std::string pay
       logger->debug("Config Query UNSPECIFIED"); 
     }
   }
-  else if(topic == "/config_event")
+  else if(topic == "config_event")
   {
     ModuleConfigEvent config_event;
     config_event.deserialize(payload);
@@ -488,7 +486,7 @@ std::string ModuleInterface::notify_queryable(std::string topic, std::string pay
     std::string reply_str = reply.serialize();
     return reply_str;
   }
-  else if(topic == "/prepare_capture")
+  else if(topic == "prepare_capture")
   {
     if(!data_broker.getCaptureRunning())
     {
@@ -529,7 +527,7 @@ std::string ModuleInterface::notify_queryable(std::string topic, std::string pay
     }
     else
     {
-      logger->debug("[Prepare_Capture] Capture already running.");
+      logger->warning("[Prepare_Capture] Capture already running.");
     }
 
     //reply with status
@@ -537,20 +535,20 @@ std::string ModuleInterface::notify_queryable(std::string topic, std::string pay
     std::string status_str = status.serialize();
     return status_str;
   }
-  else if(topic == "/get_latest")
+  else if(topic == "get_latest")
   {
     //reply with latest json data
     std::string latest_json_str = data_broker.getLatestData();
     return latest_json_str;
   }
-  else if(topic == "/get_docu")
+  else if(topic == "get_docu")
   {
     logger->debug("Received Get Documentation");
     DocumentationReply documentation_reply(module_documentation);
     std::string reply_str = documentation_reply.serialize();
     return reply_str;
   }
-  else if(topic == "/prepare_sampling")
+  else if(topic == "prepare_sampling")
   {
     //parse message
     StartStop start_stop;
@@ -565,7 +563,7 @@ std::string ModuleInterface::notify_queryable(std::string topic, std::string pay
       }
       else
       {
-        logger->debug("[Prepare_Sampling/Start] Sampling already running.");
+        logger->warning("[Prepare_Sampling/Start] Sampling already running.");
       }
     }
     else if(start_stop.cmd == StartStopCmd::STOP)
@@ -705,9 +703,6 @@ void ModuleInterface::run()
     register_module();
     sleep(1);
   }
-
-  logger->info("Waiting for signal to shutdown ...");
-  if(!signal_received) pause();
 
   shutdown();
 }

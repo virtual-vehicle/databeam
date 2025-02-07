@@ -12,6 +12,7 @@ import signal
 import multiprocessing
 
 import environ
+import orjson
 
 from vif.logger.logger import LoggerMixin, log_reentrant
 from vif.data_interface.data_broker import DataBroker
@@ -511,7 +512,7 @@ class ModuleInterface(LoggerMixin):
             time_ns, latest_data = self.data_broker.get_latest()
             if latest_data is not None:
                 latest_data['ts'] = time_ns
-                return json.dumps(latest_data).encode('utf-8')
+                return orjson.dumps(latest_data)
             else:
                 return "{}".encode('utf-8')
         except Exception as e:
@@ -521,7 +522,7 @@ class ModuleInterface(LoggerMixin):
     def __cb_get_metadata(self, data: bytes) -> str | bytes:
         try:
             metadata = self.module.get_meta_data()
-            return json.dumps(metadata).encode('utf-8')
+            return orjson.dumps(metadata)
         except Exception as e:
             self.__logger.error(f'__cb_get_metadata ({type(e).__name__}): {e}\n{traceback.format_exc()}')
             return "{}".encode('utf-8')

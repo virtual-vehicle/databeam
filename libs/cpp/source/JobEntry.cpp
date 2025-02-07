@@ -26,7 +26,7 @@ void JobEntry::update_internal()
     {
         //perform query, unlock to prevent connection_manager deadlocks
         job_manager->get_job_lock()->unlock();
-        reply_payload = connection_manager->query(db_id + "/c", "/job_submit", payload);
+        reply_payload = connection_manager->query(db_id + "/c", "job_submit", payload);
         job_manager->get_job_lock()->lock();
 
         if(reply_payload.size() > 0)
@@ -52,7 +52,7 @@ void JobEntry::update_internal()
     {
         //perform query, unlock to prevent connection_manager deadlocks
         job_manager->get_job_lock()->unlock();
-        reply_payload = connection_manager->query(db_id + "/c", "/job_update", payload);
+        reply_payload = connection_manager->query(db_id + "/c", "job_update", payload);
         job_manager->get_job_lock()->lock();
 
         if(reply_payload.size() == 0)

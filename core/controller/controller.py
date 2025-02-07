@@ -180,7 +180,7 @@ class Controller(LoggerMixin):
             self._cm.declare_queryable(Key(self._db_id, 'c', 'ping'), self._cb_ping)
 
             # open a dummy socket for docker to be able to perform a healthcheck
-            self._healthcheck_socket = create_bind('tcp://*:1100', zmq, zmq.PUSH, resolve=False)
+            self._healthcheck_socket = create_bind('tcp://*:1100', zmq, zmq.PUSH)
 
         except Exception as e:
             self.logger.error(f'start failed ({type(e).__name__}): {e}\n{traceback.format_exc()}')

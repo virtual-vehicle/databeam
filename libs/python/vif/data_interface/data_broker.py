@@ -1,4 +1,3 @@
-import json
 import os
 import time
 import logging
@@ -17,6 +16,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from enum import Enum
 
+import orjson
 from mcap.writer import Writer as McapWriter, CompressionType
 
 from vif.logger.logger import LoggerMixin, log_reentrant
@@ -104,7 +104,7 @@ def _capture_proc(shutdown_ev: multiprocessing.synchronize.Event,
                 new_schema = writer.register_schema(
                     name=f'{module_type}_{idx}' if 'dtype_name' not in s else s['dtype_name'],
                     encoding='jsonschema',
-                    data=json.dumps(s).encode())
+                    data=orjson.dumps(s))
                 cap_logger.info(f'new schema: {new_schema} with topic: '
                                 f'{module_type if "topic" not in s else s["topic"]}')
                 json_channel_ids.append(writer.register_channel(
@@ -134,11 +134,10 @@ def _capture_proc(shutdown_ev: multiprocessing.synchronize.Event,
 
                 assert isinstance(data, dict)
                 try:
-                    # catch NaN values and drop
-                    data_json = json.dumps(data, allow_nan=False).encode('utf-8')
+                    data_json = orjson.dumps(data)
                     writer.add_message(
                         channel_id=json_channel_ids[schema_idx],
-                        data=data_json,
+                        data=data_json,  # NaN not supported, null is OK
                         log_time=time_ns, publish_time=time_ns
                     )
                 except ValueError as _e:
@@ -259,7 +258,7 @@ def _live_proc(shutdown_ev: multiprocessing.synchronize.Event,
                 data['ts'] = time_ns
 
                 with data_update_lock:
-                    current_data = json.dumps(data)
+                    current_data = orjson.dumps(data)
                     data_updated_dec_available = True
 
                 # publish "live all" data
