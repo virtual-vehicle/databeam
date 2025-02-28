@@ -119,7 +119,7 @@ sudo docker compose --env-file ${ROOT_DIR}/.env -f ${ROOT_DIR}/docker-compose.ym
 # Increases the USB kernel memory from 16MB to 1000MB can be important for high USB load measurement
 # scenarios, such as using multiple cameras.
 echo "Increasing kernel USB memory buffer."
-.$SCRIPT_DIR/change_usb_mem.sh
+sudo bash $SCRIPT_DIR/change_usb_mem.sh
 
 
 printf "\nsetup done! $(date)\n"

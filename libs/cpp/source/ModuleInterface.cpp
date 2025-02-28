@@ -60,9 +60,6 @@ ModuleInterface::ModuleInterface(IOModule* io_module, EnvConfig* env_config, Log
   std::string fixed_topic = env_config->get("DB_ID") + "/m/" + module_name + "/livedec";
   data_broker.init(this->connection_manager, &data_config, logger, all_topic, fixed_topic);
 
-  //prepare the module
-  prepare_module();
-
   //wait for controller
   wait_for_controller();
 
@@ -85,6 +82,9 @@ ModuleInterface::ModuleInterface(IOModule* io_module, EnvConfig* env_config, Log
   //leave if shutdown signal was set
   if(signal_received) return;
 
+  //prepare the module
+  prepare_module();
+
   //declare queryables and subscribers
   logger->debug("Connect: Declare queryables and subscribers.");
   connection_manager->declare_queryable("config", this);
@@ -96,6 +96,7 @@ ModuleInterface::ModuleInterface(IOModule* io_module, EnvConfig* env_config, Log
   connection_manager->declare_queryable("prepare_capture", this);
   connection_manager->declare_queryable("get_latest", this);
   connection_manager->declare_queryable("ping", this);
+  connection_manager->declare_queryable("get_metadata", this);
   connection_manager->subscribe(env_config->get("DB_ID") + "/m/" + module_name + "/event_in", this);
   connection_manager->subscribe(env_config->get("DB_ID") + "/c/bc/capture", this);
   connection_manager->subscribe(env_config->get("DB_ID") + "/c/bc/sampling", this);
@@ -580,6 +581,11 @@ std::string ModuleInterface::notify_queryable(std::string topic, std::string pay
     StartStopReply reply(status);
     std::string reply_str = reply.serialize();
     return reply_str;
+  }
+  else if(topic == "get_metadata")
+  {
+    std::string meta_data = io_module->getMetaDataTemplate();
+    return meta_data;
   }
   else
   {

@@ -45,19 +45,19 @@ It provides a **scalable, easy and standardized** method to integrate different 
 
 **Core Features:**
 * **Combine any devices** to form a complete data acquisition system.
-  - Unified output data format ([MCAP](https://mcap.dev/))
+  - Unified output data format ([MCAP](https://mcap.dev/)) and live-data
   - Timestamp synchronization
   - Fast & efficient implementation
 
 * **Diverse use cases and fast integration** 
   - Interfaces can be USB, Ethernet, CAN-bus, RS-485, etc. - everything which can be connected to a computer.
-  - Combine data acquisition and real-time data processing.
+  - Combine data acquisition, real-time data processing and test bench control.
   - Documented code templates are available in **Python** and **C++** to quickly start with development.
 
 * **Intuitive and easy to use** 
   - Run the system on any Linux-computer from Raspberry Pi to a workstation.
   - A web-interface allows easy access to dedicated lab-PC or embedded device running DataBeam 24/7 for unattended automation.
-  - External time synchronization can be done by GPS 1PPS or PTP.
+  - External time synchronization by GPS 1PPS, PTP or NTP.
 
 <br />
 <div align="center">
@@ -71,7 +71,7 @@ It provides a **scalable, easy and standardized** method to integrate different 
 
 (let's assume the stack is installed and running - see <a href="#development">Development</a>/<a href="#deployment">Deployment</a>)
 
-For a quick spin, follow the **<a href="QUICKSTART.md">Quickstart document</a>**.
+For a quick spin, follow the **<a href="doc/QUICKSTART.md">Quickstart document</a>**.
 
 ### Open Web-UI
 
@@ -183,7 +183,7 @@ Configuration files, DAQ- and metadata-files are structured like this:
 
 ## Development
 
-Please consult the **<a href="DEVELOPMENT.md">development document</a>** for more details on how to create custom extensions and run the stack as a developer.
+Please consult the **<a href="doc/DEVELOPMENT.md">development document</a>** for more details on how to create custom extensions and run the stack as a developer.
 
 <div align="right">(<a href="#readme-top">back to top</a>)</div>
 
@@ -193,7 +193,7 @@ Please consult the **<a href="DEVELOPMENT.md">development document</a>** for mor
 
 The makefile offers a lot of documentation for options. Just run `make` to get help.
 
-For more details, please consult the **<a href="DEPLOYMENT.md">deployment document</a>**.
+For more details, please consult the **<a href="doc/DEPLOYMENT.md">deployment document</a>**.
 
 <div align="right">(<a href="#readme-top">back to top</a>)</div>
 
@@ -202,17 +202,46 @@ For more details, please consult the **<a href="DEPLOYMENT.md">deployment docume
 ## DAQ Data Post-Processing
 
 ### MCAP tooling
+
+#### Official
 * official homepage: https://mcap.dev/
+  - CLI tools: https://github.com/foxglove/mcap/releases?q=mcap-cli
+
+##### Examples
+
+Quickly inspect data as JSON:\
+`mcap-linux-amd64 cat Ping.mcap --json`
+
+List channels:\
+`mcap-linux-amd64 list channels Ping.mcap`
+
+List schemas:\
+`mcap-linux-amd64 list schemas Ping.mcap`
+
+General infos about file:\
+`mcap-linux-amd64 info Ping.mcap`
+
+Merge multiple MCAP files:\
+`mcap-linux-amd64 merge $(find ./ -type f -name "Ping.mcap" | sort) -o combined.mcap`
+
+And more ...
+
+
+#### Viewers
 * PlotJuggler: https://plotjuggler.io/
   - very good for quick plotting of numeric data
+* Lichtblick: https://github.com/Lichtblick-Suite/lichtblick
+  - supports plotting of numeric data, camera images and geo-locations
+  - fork of Foxglove Studio by BMW-Group
 * Foxglove Studio: https://foxglove.dev/product
   - supports plotting of numeric data, camera images and geo-locations
 
 ### Conversion Scripts
 
-`tools/mcap_reader.py` allows easy parsing of MCAP files to numpy-arrays.
+`tools/mcap_reader.py` allows easy parsing of MCAP files to numpy-arrays (including caching for faster re-opening).
 
 `tools/mcap_convert.py` converts MCAP files to CSV files.
+
 
 **TODO: further documentation and examples**
 
@@ -234,7 +263,12 @@ Virtual Vehicle Research GmbH: [https://www.v2c2.at](https://www.v2c2.at)
 
 Project Lead: Peter Sammer - peter.sammer@v2c2.at
 
-We gladly offer support, custom installations and extensions for test-benches, experiments and more.
+This repository contains only public open-source components: [https://github.com/virtual-vehicle/databeam](https://github.com/virtual-vehicle/databeam)
+
+We gladly offer support, custom installations and extensions for devices, test-benches, experiments and more.
+
+Many devices are already supported like NI, Digilent, etc. - contact for details.
+
 
 <div align="right">(<a href="#readme-top">back to top</a>)</div>
 
@@ -250,6 +284,6 @@ Thanks to the following open-source projects:
 * [Flask](https://github.com/pallets/flask) helps users interact with DataBeam.
 * [uPlot](https://github.com/leeoniya/uPlot) produces nice plots for live-data.
 * [Leaflet](https://github.com/Leaflet/Leaflet) renders beautiful maps.
-* and many, many other useful libraries and frameworks ...
+* and many other useful libraries and frameworks ...
 
 <div align="right">(<a href="#readme-top">back to top</a>)</div>

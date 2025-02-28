@@ -58,6 +58,10 @@ class NMEAReader(IOModule):
                 except TimeoutError:
                     self.logger.debug('TCP/IP connect timeout')
                     continue
+                except ConnectionRefusedError:
+                    self.logger.debug('TCP/IP connect refused')
+                    self._thread_stop_event.wait(1)
+                    continue
             return _stream
 
         stream: Optional[Union[socket.socket, serial.Serial]] = None
@@ -116,6 +120,20 @@ class NMEAReader(IOModule):
                             data.pop('heading')
                         if 'heading_status' in data:
                             data.pop('heading_status')
+                elif parsed_data.msgID == 'ASHR':  # orientation
+                    try:
+                        data['roll'] = parsed_data.roll
+                        data['pitch'] = parsed_data.pitch
+                        data['imuAlign'] = parsed_data.imuAlign  # int
+                        if 'heading' not in data:
+                            data['heading'] = parsed_data.trueHdg
+                    except ValueError:
+                        if 'roll' in data:
+                            data.pop('roll')
+                        if 'pitch' in data:
+                            data.pop('pitch')
+                        if 'imuAlign' in data:
+                            data.pop('imuAlign')
                 elif parsed_data.msgID == 'VTG':  # for speed
                     # Septentrio: only arrives if IMU is fully aligned
                     try:

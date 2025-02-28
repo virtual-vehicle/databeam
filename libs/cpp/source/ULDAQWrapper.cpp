@@ -224,7 +224,36 @@ void ULDAQWrapper::setAllChannelTypes(AiChanType chan_type)
     }
 }
 
-//err = ulAISetConfig(daq_device_handle, AiConfigItem::AI_CFG_CHAN_TYPE, i, AiChanType::AI_TC);
+void ULDAQWrapper::setTCType(int channel_index, TcType tc_type)
+{
+    UlError ul_error = ulAISetConfig(daq_device_handle, AiConfigItem::AI_CFG_CHAN_TC_TYPE, channel_index, tc_type);
+    if(ul_error != ERR_NO_ERROR) logger->error("ULDAQ Error " + std::to_string(err) + " in setTCType().");
+}
+
+void ULDAQWrapper::setAllTCTypes(TcType tc_type)
+{
+    for(int i = 0; i < 8; i++) setTCType(i, tc_type);
+}
+
+void ULDAQWrapper::logTCTypes()
+{
+    logger->debug("logTCTypes:");
+
+    for(int i = 0; i < 8; i++)
+    {
+        long long config_value;
+        UlError ul_error = ulAIGetConfig(daq_device_handle, AiConfigItem::AI_CFG_CHAN_TC_TYPE, i, &config_value);
+        
+        if(ul_error != ERR_NO_ERROR)
+        {
+            logger->error("ULDAQ Error " + std::to_string(err) + " in logTCTypes().");
+        }
+        else
+        {
+            logger->debug(std::string("- Channel ") + std::to_string(i) + std::string(" set to ") + tcTypeEnumToString((TcType)config_value));
+        }
+    }
+}
 
 DaqDeviceHandle ULDAQWrapper::getDaqDeviceHandle()
 {

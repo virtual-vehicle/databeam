@@ -108,7 +108,8 @@ class Controller(LoggerMixin):
 
         self._cm: ConnectionManager = ConnectionManager(router_hostname=cfg.DB_ROUTER,
                                                         db_id=self._db_id, node_name='c',
-                                                        shutdown_event=shutdown_ev)
+                                                        shutdown_event=shutdown_ev,
+                                                        max_parallel_req=5)  # diminishing returns for more than ~3
         self._pub_topics: Dict[str, Key] = {
             'capture': Key(self._db_id, 'c', 'bc/capture'),
             'sampling': Key(self._db_id, 'c', 'bc/sampling')
@@ -745,6 +746,8 @@ class Controller(LoggerMixin):
             return responses
 
         # send queries to each module
+        logger.debug('cmd "%s" to %d modules', cmd, len(self._module_registry))
+        t_start = time.time()
         with ThreadPoolExecutor(max_workers=len(self._module_registry)) as executor:
             future_to_module = {
                 executor.submit(self._cm.request, Key(self._db_id, f'm/{m}', cmd), payload, 1):
@@ -759,7 +762,7 @@ class Controller(LoggerMixin):
                     logger.warning(f'error from module "{future_to_module[future]}": ({type(e).__name__}): {e}\n'
                                    f'{traceback.format_exc()}')
 
-        logger.debug(f'cmd "{cmd}" responses: {responses}')
+        logger.debug('cmd "%s" took %.3fs - responses: %s', cmd, (time.time() - t_start), str(responses))
         # check if all registered modules answered
         for m in self._module_registry.keys():
             if m not in responses.keys():

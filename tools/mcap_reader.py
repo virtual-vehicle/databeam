@@ -2,11 +2,14 @@ import io
 import os
 import json
 import time
+from typing import Optional
+
 import mcap.reader
 import mcap.summary
 import numpy as np
 from pathlib import Path
 from mcap.reader import make_reader
+
 
 class McapTopic:
     def __init__(self, reader: mcap.reader.McapReader, mcap_path: Path, topic_key: int):
@@ -20,7 +23,7 @@ class McapTopic:
         self._schema = json.loads(reader.get_summary().schemas[topic_key].data.decode('utf-8'))
         self._fields = [x.replace(".", "_") for x in self._schema['properties'].keys()]
         self._dtypes = [x['type'] for x in self._schema['properties'].values()]
-        self._field_dtypes = {k: v for k,v in zip(self._fields, self._dtypes)}
+        self._field_dtypes = {k: v for k, v in zip(self._fields, self._dtypes)}
         self._np_dtype = {'integer': np.int64, 'number': np.float64, 'boolean': np.bool_, "string": "S80"}
 
     def get_fields(self):
@@ -56,7 +59,7 @@ class McapTopic:
             # parse json data
             data_dict = json.loads(message.data.decode('utf-8'))
 
-            # store timstamp
+            # store timestamp
             data['ts'][cnt] = message.publish_time
 
             # store fields
@@ -89,7 +92,7 @@ class McapTopic:
         # create numpy structured array holding fields and timestamp
         np_struct_format = [(x[0], self._np_dtype[x[1]]) for x in zip(self._fields, self._dtypes)]
         np_struct_format.append(('ts', np.uint64))
-        data = np.zeros((self._message_count, ), dtype=np_struct_format)
+        data = np.zeros((self._message_count,), dtype=np_struct_format)
 
         # counts messages
         cnt = 0
@@ -144,8 +147,8 @@ class McapTopic:
 
 class McapReader:
     def __init__(self):
-        self._mcap_file: io.BufferedReader = None
-        self._reader: mcap.reader.McapReader = None
+        self._mcap_file: Optional[io.BufferedReader] = None
+        self._reader: Optional[mcap.reader.McapReader] = None
         self._mcap_topics = {}
         self._topic_lut = {}
         self._mcap_path = None
@@ -190,10 +193,9 @@ class McapReader:
 
         print(info)
 
+
 if __name__ == '__main__':
-    measurement_path = "/home/michelicadm/Downloads/measurements/2024-06-12_15-28-15.937_15_TestCSV"
-    #measurement_path = "/home/michelicadm/Downloads/measurements/2024-06-12_16-46-07.434_18_TestCSV"
-    #measurement_path = "/home/michelicadm/Downloads/measurements/2024-06-12_16-46-07.434_18_TestCSV"
+    measurement_path = "./2024-06-12_15-28-15.937_15_TestCSV"
 
     # open mcap file and print info
     mcap_reader = McapReader()
@@ -202,13 +204,13 @@ if __name__ == '__main__':
 
     # get data
     start_ts = time.time()
-    #data = mcap_reader.get_data("ping")
+    #module_data = mcap_reader.get_data("ping")
     #data = mcap_reader.get_data_list("ping")
-    data = mcap_reader.get_data("Redlab-1808")
+    module_data = mcap_reader.get_data("Redlab-1808")  # TODO: add option to load all topics --> dict of struc-arrays
     print("Time: " + str(round(time.time() - start_ts, 2)) + " seconds")
 
     # print data
-    print(len(data['ts']))
+    print(len(module_data['ts']))
     #print(data.keys())
 
     # close mcap reader

@@ -142,11 +142,9 @@ class ConstantPublisher(IOModule):
             return Status(error=True, title=type(e).__name__, message=str(e))
 
     def command_prepare_sampling(self):
-        self.logger.info('prepare sampling!')
         self._start_thread()
 
     def command_stop_sampling(self):
-        self.logger.info('stop sampling!')
         self._stop_thread()
 
     def command_get_meta_data(self) -> Dict[str, Union[str, int, float, bool]]:

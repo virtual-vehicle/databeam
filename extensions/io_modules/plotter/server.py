@@ -21,7 +21,7 @@ log.setLevel(logging.ERROR)
 
 
 class Server:
-    def __init__(self, cm: ConnectionManager, databeam_id, shutdown_queue, live_data_receiver: LiveDataReceiver,
+    def __init__(self, cm: ConnectionManager, databeam_id, port: int, shutdown_queue, live_data_receiver: LiveDataReceiver,
                  config_handler: ConfigHandler, websocket_api: WebSocketAPI):
         self.logger = logging.getLogger('Server')
         self.cm = cm
@@ -39,7 +39,7 @@ class Server:
         self._client_id_counter = 0
 
         self._cfg = {
-            'port': 6010
+            'port': port
         }
 
         self.app: Flask = Flask("RPI Server")

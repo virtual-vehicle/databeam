@@ -76,7 +76,6 @@ include:
   # - deploy/compose-files/docker-compose.system_monitor.yml
   # - deploy/compose-files/docker-compose.tcp_sink.yml
   # - deploy/compose-files/docker-compose.udp_sink.yml
-  # - deploy/compose-files/docker-compose.open_scale.yml
 
 networks:
   internal_nw:

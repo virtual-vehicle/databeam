@@ -34,18 +34,14 @@ public:
     virtual void unsubscribe(std::string key, INetworkSubscriber* subscriber_interface) = 0;
     virtual void publish(std::string key, std::string data) = 0;
     virtual std::string query(std::string identity, std::string topic, std::string data, double timeout = 1.0) = 0;
+    virtual void set_external_databeams(std::vector<std::string> db_id_list, std::vector<std::string> hostname_list);
 
     std::string get_db_id();
     std::string get_host_name();
 
     void set_db_id(std::string db_id);
 
-    void set_external_databeams(std::vector<std::string> db_id_list, 
-        std::vector<std::string> hostname_list);
-
 protected:
-    std::string get_external_hostname(std::string db_id);
-
     //environment config
     EnvConfig* env_config = nullptr;
 
@@ -57,10 +53,6 @@ protected:
 
     std::string db_id = "dbid";
     std::string hostname = "localhost";
-
-    //list of external databeams
-    std::vector<std::string> db_id_list;
-    std::vector<std::string> hostname_list;
 
 private:
     std::string log_prefix = "[Base CM] ";

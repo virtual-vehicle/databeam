@@ -18,6 +18,12 @@ class Model {
     this.view = view
   }
 
+  setServerPort(port)
+  {
+    this.server_port = port
+    this.ws_port = (parseInt(port) + 1).toString()
+  }
+
   setServerIP(server_ip)
   { 
     this.server_ip = server_ip 

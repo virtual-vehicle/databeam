@@ -60,10 +60,7 @@ void MultiConnectionManager::subscribe(std::string key, INetworkSubscriber* subs
         }
     }
 
-    //try to add new connection manager for db_id
-    if(!add_connection_manager(id)) return;
-    subscribe(key, subscriber_interface);
-
+    logger->error(log_prefix + std::string("Subscribe for unknown db_id with key: ") + key);
     return;
 }
 
@@ -106,10 +103,7 @@ void MultiConnectionManager::publish(std::string key, std::string data)
         }
     }
 
-    //try to add new connection manager for db_id
-    if(!add_connection_manager(id)) return;
-    publish(key, data);
-
+    logger->error(log_prefix + std::string("Publish for unknown db_id with key: ") + key);
     return;
 }
 
@@ -119,22 +113,16 @@ std::string MultiConnectionManager::extract_db_id(std::string str)
     return (pos != std::string::npos) ? str.substr(0, pos) : str;
 }
 
-bool MultiConnectionManager::add_connection_manager(std::string external_db_id)
+void MultiConnectionManager::set_external_databeams(std::vector<std::string> db_id_list, std::vector<std::string> hostname_list)
 {
-    //get hostname to given db_id
-    std::string external_hostname = get_external_hostname(external_db_id);
+    //call base implementation to log lists
+    ConnectionManager::set_external_databeams(db_id_list, hostname_list);
 
-    //leave if there is no such db_id
-    if(external_hostname == "")
+    //add connection managers for external databeams
+    for(unsigned int i = 0; i < hostname_list.size(); i++)
     {
-        logger->error("Could not get external hostname for db_id: " + external_db_id);
-        return false;
+        ZMQConnectionManager* cm = new ZMQConnectionManager(env_config, node_name, hostname_list[i], logger);
+        cm->set_db_id(db_id_list[i]);
+        connection_managers.push_back(cm);
     }
-
-    //create new connection manager with external databeam hostname
-    ZMQConnectionManager* cm = new ZMQConnectionManager(env_config, node_name, external_hostname, logger);
-    cm->set_db_id(external_db_id);
-    connection_managers.push_back(cm);
-
-    return true;
 }

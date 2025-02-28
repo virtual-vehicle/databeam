@@ -1,8 +1,11 @@
 
 class PlotWindow
 {
-  constructor(view, model, parent_div, default_module, default_plot_type, plot_options, channels)
+  constructor(view, model, parent_div, default_module, default_plot_type, plot_options, channels, grid_indices, plot_index)
   {
+    this.plot_index = plot_index
+    this.grid_indices = grid_indices
+
     //store view
     this.view = view
     this.model = model
@@ -15,6 +18,7 @@ class PlotWindow
 
     //clear parent
     this.parent_div.innerHTML = ""
+    this.setGridIndices(...grid_indices)
 
     //create header div
     this.header_div = document.createElement("div");
@@ -23,6 +27,7 @@ class PlotWindow
     //create header label
     this.header_label = document.createElement("h1")
     this.header_label.innerHTML = "Module Name"
+    this.header_label.style.cursor = "move"
     this.header_div.appendChild(this.header_label)
 
     //div for header options
@@ -117,12 +122,42 @@ class PlotWindow
     //resize plot
     this.plot_resized()
 
-    console.log("NUM CH: " + channels.split(",").length.toString())
+    //console.log("NUM CH: " + channels.split(",").length.toString())
 
     this.options_enabled = false;
 
     this.enabled_channels = channels != "" ? channels.split(",") : []
     this.all_channels = []
+  }
+
+  setGridIndices(start_x, start_y, end_x, end_y)
+  {
+    this.grid_indices[0] = start_x
+    this.grid_indices[1] = start_y
+    this.grid_indices[2] = end_x
+    this.grid_indices[3] = end_y
+    this.parent_div.style.gridColumn = `${start_x}/${end_x}`
+    this.parent_div.style.gridRow = `${start_y}/${end_y}`
+  }
+
+  getGridIndices()
+  {
+    return this.grid_indices
+  }
+
+  getPlotIndex()
+  {
+    return this.plot_index
+  }
+
+  getPlotDiv()
+  {
+    return this.parent_div
+  }
+
+  getHeaderLabel()
+  {
+    return this.header_label
   }
 
   createOptions()

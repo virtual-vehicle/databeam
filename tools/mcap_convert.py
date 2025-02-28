@@ -4,6 +4,7 @@ import csv
 import json
 import time
 from pathlib import Path
+from typing import Optional
 
 from mcap.reader import make_reader
 
@@ -12,6 +13,7 @@ class IMessageWriter:
     """
     MessageWriter interface. Derived to handle different channel topics.
     """
+
     def write_line(self, message, data_dict, schema, csv_writer):
         """
         Virtual function to override with a specific MessageWriter class. Defines how the
@@ -33,18 +35,20 @@ class IMessageWriter:
             return OscilloscopeMessageWriter()
         else:
             return DefaultMessageWriter()
-    
+
+
 class DefaultMessageWriter(IMessageWriter):
     """
     The default line writer. Writes each value of a message into another column.
     """
+
     def write_line(self, message, data_dict, schema, csv_writer):
         ts = message.publish_time
 
         if schema.name == "foxglove.GeoJSON":
             coordinates = json.loads(data_dict['geojson'])['coordinates']
-            data_dict = {'lon': coordinates[0], 
-                        'lat': coordinates[1]}
+            data_dict = {'lon': coordinates[0],
+                         'lat': coordinates[1]}
 
         csv_writer.writerow([ts] + list(data_dict.values()))
 
@@ -55,17 +59,18 @@ class OscilloscopeMessageWriter(IMessageWriter):
     into a single column in different rows. A rel_time list is used to add the a time
     passed since start of the oscilloscope window to the timestamp.
     """
+
     def write_line(self, message, data_dict, schema, csv_writer):
         data_len = len(data_dict["rel_time"])
 
         for i in range(data_len):
-            inject_dict =  {}
+            inject_dict = {}
             ts = int(message.publish_time) + int(data_dict["rel_time"][i])
             for key in data_dict.keys():
                 if isinstance(data_dict[key], list):
                     inject_dict[key] = data_dict[key][i]
                 elif key == "timestamp":
-                    pass # Leave out timestamp, since it will later be included as ts.
+                    pass  # Leave out timestamp, since it will later be included as ts.
                 else:
                     inject_dict[key] = data_dict[key]
 
@@ -79,20 +84,22 @@ def num_messages_str(num_samples):
         return str(round(num_samples / 1000, 1)) + "k"
     return str(round(num_samples / 1000000, 1)) + "M"
 
+
 def elapsed_time_str(seconds):
     if seconds < 0.01:
         return str(round(seconds * 1000, 3)) + "ms"
     else:
         return str(round(seconds, 2)) + "s"
 
+
 def meta_to_csv(measurement_path, module_name):
-    module_meta_path = measurement_path / m / "module_meta.json"
-    csv_path = measurement_path / m / "csv" / "module_meta.csv"
+    module_meta_path = measurement_path / module_name / "module_meta.json"
+    csv_path = measurement_path / module_name / "csv" / "module_meta.csv"
 
     if not os.path.exists(module_meta_path):
-        print("[Convert] Meta data file for " + m + " not found - skipping")
+        print("[Convert] Meta data file for " + module_name + " not found - skipping")
         return
-    print("[Convert] " + m + " meta data")
+    print("[Convert] " + module_name + " meta data")
 
     with open(module_meta_path, "r") as f:
         meta_dict = json.load(f)
@@ -102,6 +109,7 @@ def meta_to_csv(measurement_path, module_name):
         del meta_dict['config']
 
         # open csv file and write meta
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
         with open(csv_path, "w", newline="") as csv_file:
             csv_writer = csv.writer(csv_file)
             for k, v in meta_dict.items():
@@ -110,16 +118,27 @@ def meta_to_csv(measurement_path, module_name):
                 csv_writer.writerow([k, v])
 
 
-def mcap_to_csv(measurement_path: Path, module_name):
+def mcap_to_csv(measurement_path: Path, module_name: Optional[str] = None) -> None:
+    measurement_path = Path(measurement_path)
     # compute path to mcap and csv file
-    mcap_path = measurement_path / module_name / (module_name + ".mcap")
+    if os.path.isfile(measurement_path):
+        if module_name is not None:
+            print("Error: module_name must be None if measurement_path is a file.")
+            return
+        if not measurement_path.name.endswith(".mcap"):
+            print("Error: measurement_path must be a .mcap file.")
+            return
+        input_dir = measurement_path.parent
+        mcap_path = measurement_path
+    else:
+        input_dir = measurement_path / module_name
+        mcap_path = input_dir / (module_name + ".mcap")
 
-    # log conversion start
     # check if file exists
     if not os.path.exists(mcap_path):
-        print("[Convert] " + m + ".mcap not found - skipping")
+        print("[Convert] " + mcap_path.name + " not found - skipping")
         return
-    print("[Convert] " + m + ".mcap")
+    print("[Convert] " + mcap_path.name)
 
     with open(mcap_path, "rb") as f:
         # create mcap reader
@@ -132,7 +151,7 @@ def mcap_to_csv(measurement_path: Path, module_name):
         channels = [v for k, v in reader.get_summary().channels.items()]
         statistics = reader.get_summary().statistics
 
-        if(len(statistics.channel_message_counts) == 0):
+        if len(statistics.channel_message_counts) == 0:
             print("  No schema for mcap file found. Skipped.")
             return
 
@@ -156,7 +175,8 @@ def mcap_to_csv(measurement_path: Path, module_name):
             mod = int(max(message_count / 100, 1))
 
             # create csv path
-            csv_path = measurement_path / module_name / "csv" / (ch.topic + ".csv")
+            csv_path = input_dir / "csv" / (ch.topic + ".csv")
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
 
             # open csv file
             csv_file = open(csv_path, "w", newline="")
@@ -187,7 +207,7 @@ def mcap_to_csv(measurement_path: Path, module_name):
                 if cnt % mod == 0:
                     elapsed = (time.time() - start_ts) + sys.float_info.epsilon
                     msg_per_sec = cnt / elapsed
-                    percent_str = str(int((cnt/message_count) * 100)) + "%"
+                    percent_str = str(int((cnt / message_count) * 100)) + "%"
                     time_remaining = int((message_count - cnt) / msg_per_sec)
                     print(f'\r    {ch.topic}: {percent_str}, {time_remaining}s remaining', end="")
 
@@ -201,24 +221,24 @@ def mcap_to_csv(measurement_path: Path, module_name):
 
 
 if __name__ == '__main__':
+    # provide a single .mcap file or a databeam-measurement directory
     if len(sys.argv) > 1:
-        measurement_path = Path(sys.argv[1])
+        measurement_arg_path = Path(sys.argv[1])
     else:
-        measurement_path = Path("/home/michelicadm/Downloads/measurements/2024-06-12_15-28-15.937_15_TestCSV")
+        measurement_arg_path = Path("measurements_0/2025-01-17_09-10-17.357_6_test")
 
-    dirs = os.listdir(measurement_path)
-    modules = [x for x in dirs if x != "meta.json"]
-    print("Modules: " + str(modules) + "\n")
+    if os.path.isfile(measurement_arg_path):
+        # convert single mcap file
+        mcap_to_csv(measurement_arg_path)
+    else:
+        # convert whole measurement directory with module-directories
+        dirs = os.listdir(measurement_arg_path)
+        modules = [x for x in dirs if x != "meta.json"]
+        print("Modules: " + str(modules) + "\n")
 
-    # iterate all modules
-    for m in modules:
-        module_csv_dir = measurement_path / m / "csv"
-
-        # create csv directory
-        if not os.path.exists(module_csv_dir):
-            os.mkdir(module_csv_dir)
-
-        # convert mcap to csv
-        mcap_to_csv(measurement_path, m)
-        meta_to_csv(measurement_path, m)
-        print("")
+        # iterate all modules
+        for m in modules:
+            # convert mcap to csv
+            mcap_to_csv(measurement_arg_path, m)
+            meta_to_csv(measurement_arg_path, m)
+            print("")

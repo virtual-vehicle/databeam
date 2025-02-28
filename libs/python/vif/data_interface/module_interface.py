@@ -42,7 +42,7 @@ class ModuleInterfaceEnv:
     CONFIG_DIR = environ.var(help='config directory without deploy version', converter=lambda x: Path(x).expanduser())
     DATA_DIR = environ.var(help='data directory without deploy version', converter=lambda x: Path(x).expanduser())
     DEPLOY_VERSION = environ.var(help='docker images tag', default='latest')
-    DB_ID = environ.var(help='DataBeam domain name for communication', default='db_debug')
+    DB_ID = environ.var(help='DataBeam domain name for communication', default='db')
     DB_ROUTER = environ.var(help='DataBeam router hostname to find other nodes', default='localhost')
 
 
@@ -76,8 +76,7 @@ class ModuleInterface(LoggerMixin):
         self.data_dir = self.env_cfg.DATA_DIR / self.env_cfg.DEPLOY_VERSION
 
         self.cm = ConnectionManager(router_hostname=self.env_cfg.DB_ROUTER,
-                                    db_id=self.db_id, node_name=f'm/{module_name}',
-                                    shutdown_event=shutdown_event)
+                                    db_id=self.db_id, node_name=f'm/{module_name}')
 
         self.__registered = False
         self.__controller_watchdog_thread: Optional[threading.Thread] = None
@@ -260,13 +259,13 @@ class ModuleInterface(LoggerMixin):
                                         f'{value.status.title}: {value.status.message}')
                 self.__logger.info('successfully removed module from controller')
 
-            self.cm.close()
-
             # stop capturing and sampling
             self.module.command_stop_capturing()
             self.data_broker.stop_capturing()
             self.data_broker.close()
             self.module.command_stop_sampling()
+
+            self.cm.close()
 
             # stop module
             self.module.stop()
@@ -483,7 +482,7 @@ class ModuleInterface(LoggerMixin):
                     or self.data_config.enable_live_fixed_rate:
                 # check if sampling is already enabled
                 if self.state.state != MeasurementStateType.SAMPLING:
-                    logger.debug('start sampling')
+                    logger.debug('prepare and start sampling')
                     self.module.command_prepare_sampling()
                     self.state.state = MeasurementStateType.PREPARE_SAMPLING
                     self.module.command_start_sampling()
@@ -648,6 +647,7 @@ def main(module: Type[IOModule], config_type: Type[BaseConfig], module_name: str
                           f'{traceback.format_exc()}')
     else:
         shutdown_ev.wait()
+    shutdown_ev.set()
     module_interface.teardown()
 
     num_threads_left = threading.active_count() - 1

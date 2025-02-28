@@ -42,9 +42,14 @@ public:
     void logDeviceInfo(std::string device_id);
     void logTriggerTypes();
     void logAOInfo();
+    
 
     void setChannelType(int channel_index, AiChanType chan_type);
     void setAllChannelTypes(AiChanType chan_type);
+
+    void setTCType(int channel_index, TcType tc_type);
+    void setAllTCTypes(TcType tc_type);
+    void logTCTypes();
 
     DaqDeviceHandle getDaqDeviceHandle();
 private:

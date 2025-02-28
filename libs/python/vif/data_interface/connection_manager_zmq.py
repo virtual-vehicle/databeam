@@ -81,7 +81,8 @@ class BrokerEnv:
 
 
 class RouterConnection(LoggerMixin):
-    def __init__(self, *args, db_id: str, router_hostname: str, node_name: str = '', **kwargs):
+    def __init__(self, *args, db_id: str, router_hostname: str, node_name: str = '', max_parallel_req: int = 1,
+                 **kwargs):
         """
 
         """
@@ -104,15 +105,16 @@ class RouterConnection(LoggerMixin):
 
         if len(self._node_name) > 0:
             ident_key = Key(self._db_id, self._node_name, topic='-')
-            self._query_req_sock_lock = threading.Lock()
-            self._query_req_sock = create_connect(f'tcp://{self._router_hostname}:'
-                                                  f'{self._ports.DB_ROUTER_FRONTEND_PORT}',
-                                                  zmq, zmq.DEALER, identity=ident_key.ident.encode(), timeout_ms=1000)
+            self._query_req_socks = queue.Queue()
+            for i in range(max_parallel_req):
+                self._query_req_socks.put(create_connect(f'tcp://{self._router_hostname}:'
+                                                         f'{self._ports.DB_ROUTER_FRONTEND_PORT}',
+                                                         zmq, zmq.DEALER, identity=f'{ident_key.ident}{i}'.encode(),
+                                                         timeout_ms=1000))
         else:
             self.logger.debug('node_name not specified: disabled queryables and queries')
             # external routers do not support queries
-            self._query_req_sock_lock = None
-            self._query_req_sock = None
+            self._query_req_socks = None
 
         self._subscribers_lock = threading.Lock()
         # key (topic): list of uuids (int) and callbacks
@@ -143,9 +145,10 @@ class RouterConnection(LoggerMixin):
         self._subscribe_thread.join()
         with self._pub_sock_lock:
             self._pub_sock.close()
-        if self._query_req_sock_lock is not None:
-            with self._query_req_sock_lock:
-                self._query_req_sock.close()
+        if self._query_req_socks is not None:
+            while not self._query_req_socks.empty():
+                sock = self._query_req_socks.get()
+                sock.close()
 
     def _queryable_worker(self) -> None:
         logger = logging.getLogger('_queryable_worker')
@@ -188,6 +191,7 @@ class RouterConnection(LoggerMixin):
                 logger.error(f'EX ({type(e).__name__}): {e}\n{traceback.format_exc()}')
 
         sock.close()
+        logger.debug('exiting')
 
     def declare_queryable(self, key: Key, cb: Callable[[bytes], str | bytes]) -> str:
         self.logger.debug('registering queryable %s', key)
@@ -204,41 +208,43 @@ class RouterConnection(LoggerMixin):
             self._queryables.pop(topic)
 
     def request(self, key: Key, data: bytes | str | None = None, timeout=1.0) -> Optional[bytes]:
-        with self._query_req_sock_lock:
-            try:
-                # drain socket to avoid getting "late" answers
-                flush_queue_sync(self._query_req_sock)
+        sock = self._query_req_socks.get()
+        try:
+            # drain socket to avoid getting "late" answers
+            flush_queue_sync(sock)
 
-                if isinstance(data, str):
-                    data = data.encode()
-                elif data is None:
-                    data = b''
+            if isinstance(data, str):
+                data = data.encode()
+            elif data is None:
+                data = b''
 
-                req = QueryableEnvelope(ident=key.ident, uuid=random.randbytes(8), topic=key.topic, payload=data)
-                # self.logger.debug('requesting %s - %s', key, req)
-                self._query_req_sock.send_multipart(req.to_multipart())
-                rx = None
-                t_start = time.time()
-                while (time.time() - t_start) < timeout:
-                    try:
-                        rx = QueryableEnvelope.from_multipart(self._query_req_sock.recv_multipart())
-                    except zmq.Again:
-                        continue  # timeout: nothing received, wait longer
-                    if rx.uuid == req.uuid:
-                        break  # received correct answer
-                    else:
-                        self.logger.warning(f'request received wrong UUID: {rx.uuid.hex()} vs. {req.uuid.hex()} '
-                                            f'for key {key}')
-                        rx = None
-                        continue
-                if rx is not None:
-                    # self.logger.debug('Reply received from %s - %s', rx.ident, rx)
-                    return rx.payload
+            req = QueryableEnvelope(ident=key.ident, uuid=random.randbytes(8), topic=key.topic, payload=data)
+            # self.logger.debug('requesting %s - %s', key, req)
+            sock.send_multipart(req.to_multipart())
+            rx = None
+            t_start = time.time()
+            while (time.time() - t_start) < timeout:
+                try:
+                    rx = QueryableEnvelope.from_multipart(sock.recv_multipart())
+                except zmq.Again:
+                    continue  # timeout: nothing received, wait longer
+                if rx.uuid == req.uuid:
+                    break  # received correct answer
                 else:
-                    self.logger.error(f'request {key} - timeout')
-            except Exception as e:
-                self.logger.error(f'EX request ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+                    self.logger.warning(f'request received wrong UUID: {rx.uuid.hex()} vs. {req.uuid.hex()} '
+                                        f'for key {key}')
+                    rx = None
+                    continue
+            if rx is not None:
+                # self.logger.debug('Reply received from %s - %s', rx.ident, rx)
+                self._query_req_socks.put(sock)
+                return rx.payload
+            else:
+                self.logger.error(f'request {key} - timeout')
+        except Exception as e:
+            self.logger.error(f'EX request ({type(e).__name__}): {e}\n{traceback.format_exc()}')
 
+        self._query_req_socks.put(sock)
         return None
 
     def _subscribe_worker(self) -> None:
@@ -263,8 +269,10 @@ class RouterConnection(LoggerMixin):
                 topic = topic_bytes.decode()
                 # logger.debug('rx: %s', rx_msg)
                 with self._subscribers_lock:
-                    for cb in self._subscribers.get(topic):
-                        cb[1](topic, rx_msg)
+                    cb_list = [cb[1] for cb in self._subscribers.get(topic)]
+                # execute callbacks outside of lock
+                for cb in cb_list:
+                    cb(topic, rx_msg)
             except zmq.Again:
                 continue  # timeout: nothing received
             except Exception as e:
@@ -315,7 +323,14 @@ class RouterConnection(LoggerMixin):
 
 class ConnectionManager(LoggerMixin):
     def __init__(self, *args, router_hostname: str, db_id: str, node_name: str = '',
-                 shutdown_event: Optional[threading.Event] = None, **kwargs):
+                 shutdown_event: Optional[threading.Event] = None, max_parallel_req: int = 1, **kwargs):
+        """
+        @param router_hostname: hostname of router
+        @param db_id: databeam ID
+        @param node_name: identifier of process
+        @param shutdown_event: shutdown event
+        @param max_parallel_req: maximum number of parallel requests
+        """
         super().__init__(*args, **kwargs)
 
         self.env_cfg = environ.to_config(BrokerEnv)
@@ -338,7 +353,7 @@ class ConnectionManager(LoggerMixin):
         self._router_connections_lock = threading.Lock()
         self._router_connections: Dict[str, RouterConnection] = {
             self._db_id: RouterConnection(db_id=self._db_id, router_hostname=self._router_hostname,
-                                          node_name=self._node_name)
+                                          node_name=self._node_name, max_parallel_req=max_parallel_req)
         }
 
         # list of databeam IDs and hostnames
@@ -358,6 +373,7 @@ class ConnectionManager(LoggerMixin):
         with self._router_connections_lock:
             for nc in self._router_connections.values():
                 nc.close()
+            self._router_connections.clear()
 
         self.logger.info('terminated')
 
@@ -396,8 +412,7 @@ class ConnectionManager(LoggerMixin):
         """
         assert self.initialized, 'connection manager not initialized'
         assert key.db_id == self._db_id, 'request only allowed to our own DBID'
-        with self._router_connections_lock:
-            return self._router_connections[self._db_id].request(key, data, timeout)
+        return self._router_connections[self._db_id].request(key, data, timeout)
 
     def subscribe(self, key: Key, cb: Callable[[str, bytes], None]) -> int:
         assert self.initialized, 'connection manager not initialized'
@@ -435,7 +450,7 @@ if __name__ == '__main__':
         return b'answer'
 
 
-    i = cm.declare_queryable(Key('dbid', 'c', 'bla'), q_cb)
+    _ = cm.declare_queryable(Key('dbid', 'c', 'bla'), q_cb)
 
     # pubs = []
     # i = cm.declare_publisher('pub/bla')

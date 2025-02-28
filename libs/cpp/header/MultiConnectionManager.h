@@ -20,12 +20,12 @@ public:
     void unsubscribe(std::string key, INetworkSubscriber* subscriber_interface) override;
     void publish(std::string key, std::string data) override;
     std::string query(std::string identity, std::string topic, std::string data, double timeout = 1.0) override;
+    void set_external_databeams(std::vector<std::string> db_id_list, std::vector<std::string> hostname_list) override;
 
 private:
-    bool add_connection_manager(std::string external_db_id);
-
     std::string extract_db_id(std::string str);
 
+    //log prefix for this connection manager
     std::string log_prefix = "[Multi CM] ";
 
     //holds all connection managers

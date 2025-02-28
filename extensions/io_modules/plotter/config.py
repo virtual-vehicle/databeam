@@ -11,11 +11,13 @@ class PlotterConfig(BaseConfig):
     @classmethod
     def _schema(cls) -> Mapping:
         cfg = ConfigFactory()
-        cfg.integer_array("layout", [3, 2]).resizeable()
+        cfg.integer("port", 6010)
+        cfg.integer_array("layout", [3, 2]).resizeable().hidden()
         cfg.string_array('modules', ["Ping"]).resizeable().hidden()
         cfg.string_array('plot_types', ["Line"]).resizeable().hidden()
         cfg.string_array('options', ['{}']).resizeable().hidden()
         cfg.string_array('channels', ['']).resizeable().hidden()
+        cfg.string_array('grid_indices', ['{}']).resizeable().hidden()
         cfg.string('live_data_source', '{}').hidden()
 
         return cfg.get_config()

@@ -41,18 +41,7 @@ void ConnectionManager::set_db_id(std::string db_id)
 
 void ConnectionManager::set_external_databeams(std::vector<std::string> db_id_list, std::vector<std::string> hostname_list)
 {
-    this->db_id_list = db_id_list;
-    this->hostname_list = hostname_list;
     logger->debug(log_prefix + std::string("External DB_IDs: ") + Utils::vectorToString(db_id_list));
     logger->debug(log_prefix + std::string("External Hostnames: ") + Utils::vectorToString(hostname_list));
-}
-
-std::string ConnectionManager::get_external_hostname(std::string db_id)
-{
-    for(unsigned int i = 0; i < db_id_list.size(); i++)
-    {
-        if(db_id_list[i] == db_id) return hostname_list[i];
-    }
-
-    return "";
+    return;
 }

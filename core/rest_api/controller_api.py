@@ -36,8 +36,8 @@ class ControllerAPI(LoggerMixin):
         self.logger.info('Init with databeam id: ' + self._databeam_id)
         self.shutdown_ev = shutdown_ev
 
-        self.cm = ConnectionManager(router_hostname=db_router, db_id=self._databeam_id,
-                                    node_name='r', shutdown_event=shutdown_ev)
+        self.cm = ConnectionManager(router_hostname=db_router, db_id=self._databeam_id, node_name='r',
+                                    shutdown_event=shutdown_ev, max_parallel_req=5)
 
     def start(self):
         # wait for connection to controller
@@ -192,7 +192,7 @@ class ControllerAPI(LoggerMixin):
         reply = None
         try:
             message = ModuleRegistryQuery(cmd=ModuleRegistryQueryCmd.LIST)
-            reply = self.cm.request(Key(self._databeam_id, 'c', 'module_registry'), message.serialize())
+            reply = self.cm.request(Key(self._databeam_id, 'c', 'module_registry'), message.serialize(), 2)
             value = ModuleRegistryReply.deserialize(reply)
             return value.get_dict()
         except Exception as e:
@@ -219,7 +219,7 @@ class ControllerAPI(LoggerMixin):
         reply = None
         try:
             message = StartStop(cmd=StartStopCmd.START)
-            reply = self.cm.request(Key(self._databeam_id, 'c', 'cmd_capture'), message.serialize())
+            reply = self.cm.request(Key(self._databeam_id, 'c', 'cmd_capture'), message.serialize(), 2)
             message = StartStopReply.deserialize(reply)
             return message.get_dict()
         except Exception as e:
@@ -229,7 +229,7 @@ class ControllerAPI(LoggerMixin):
         reply = None
         try:
             message = StartStop(cmd=StartStopCmd.STOP)
-            reply = self.cm.request(Key(self._databeam_id, 'c', 'cmd_capture'), message.serialize())
+            reply = self.cm.request(Key(self._databeam_id, 'c', 'cmd_capture'), message.serialize(), 2)
             message = StartStopReply.deserialize(reply)
             return message.get_dict()
         except Exception as e:
@@ -239,7 +239,7 @@ class ControllerAPI(LoggerMixin):
         reply = None
         try:
             message = StartStop(cmd=StartStopCmd.START)
-            reply = self.cm.request(Key(self._databeam_id, 'c', 'cmd_sampling'), message.serialize())
+            reply = self.cm.request(Key(self._databeam_id, 'c', 'cmd_sampling'), message.serialize(), 2)
             message = StartStopReply.deserialize(reply)
             return message.get_dict()
         except Exception as e:
@@ -249,7 +249,7 @@ class ControllerAPI(LoggerMixin):
         reply = None
         try:
             message = StartStop(cmd=StartStopCmd.STOP)
-            reply = self.cm.request(Key(self._databeam_id, 'c', 'cmd_sampling'), message.serialize())
+            reply = self.cm.request(Key(self._databeam_id, 'c', 'cmd_sampling'), message.serialize(), 2)
             message = StartStopReply.deserialize(reply)
             return message.get_dict()
         except Exception as e:
@@ -268,7 +268,7 @@ class ControllerAPI(LoggerMixin):
         reply = None
         try:
             message = SystemControlQuery(cmd=cmd_dict[command_str])
-            reply = self.cm.request(Key(self._databeam_id, 'c', 'system_control'), message.serialize())
+            reply = self.cm.request(Key(self._databeam_id, 'c', 'system_control'), message.serialize(), 2)
             message = SystemControlReply.deserialize(reply)
             return message.get_dict()
         except Exception as e:

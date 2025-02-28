@@ -1,16 +1,19 @@
 <h2>WebInterface</h2>
 <p>
-[Link:6010:Plotter Webinterface]
+[Link:6010:Plotter Webinterface @ port 6010]
 </p>
 
 <h2>Description</h2>
 <p>
-    http-port: 6010
+    Webinterface for plotting of Data.Beam live data.
+    If you change the Port in the config make sure to adjust it in the URL as the
+    link above uses 6010 as default port.
 </p>
 
 <h2>Configuration</h2>
 <ul>
-  <li><b>Layout:</b> List of row entries. Values specify number of columns.</li>
+  <li><b>Port:</b> Select port for server. Must be an even number within range [6010, 6038]. Port used
+      for websocket connection is Port + 1.</li>
 </ul>
 <br>
 
