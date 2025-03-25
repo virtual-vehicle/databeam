@@ -41,13 +41,15 @@ ssh -t ${TARGET_USERNAME}@${TARGET_HOSTNAME} "\
 
 printf '\n***** copy installer files:\n'
 scp $SCRIPT_DIR/setup.sh ${TARGET_USERNAME}@${TARGET_HOSTNAME}:$DEPLOY_DIR/scripts
+scp $SCRIPT_DIR/helpers.sh ${TARGET_USERNAME}@${TARGET_HOSTNAME}:$DEPLOY_DIR/scripts
+scp $SCRIPT_DIR/change_version.sh ${TARGET_USERNAME}@${TARGET_HOSTNAME}:$DEPLOY_DIR/scripts
 scp $SCRIPT_DIR/change_usb_mem.sh ${TARGET_USERNAME}@${TARGET_HOSTNAME}:$DEPLOY_DIR/scripts
 scp $SCRIPT_DIR/../databeam.service ${TARGET_USERNAME}@${TARGET_HOSTNAME}:$DEPLOY_DIR
 scp $SCRIPT_DIR/../databeam_run.sh ${TARGET_USERNAME}@${TARGET_HOSTNAME}:$DEPLOY_DIR
 scp $SCRIPT_DIR/../databeam_hostcmd.service ${TARGET_USERNAME}@${TARGET_HOSTNAME}:$DEPLOY_DIR
 scp $SCRIPT_DIR/../../.env ${TARGET_USERNAME}@${TARGET_HOSTNAME}:$DEPLOY_DIR/..
 scp $SCRIPT_DIR/../../docker-compose.yml ${TARGET_USERNAME}@${TARGET_HOSTNAME}:$DEPLOY_DIR/..
-scp -r $SCRIPT_DIR/../compose-files ${TARGET_USERNAME}@${TARGET_HOSTNAME}:$DEPLOY_DIR/compose-files
+scp -r $SCRIPT_DIR/../compose-files ${TARGET_USERNAME}@${TARGET_HOSTNAME}:$DEPLOY_DIR/
 
 printf '\n***** compiling host-command-helper daemon (golang):\n'
 TARCH=$(ssh -n ${TARGET_USERNAME}@${TARGET_HOSTNAME} "uname -m")

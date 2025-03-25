@@ -35,6 +35,8 @@ BUILD_LOCAL=1 make pull-images
 BUILD_LOCAL=1 make base-all
 ```
 
+> **_NOTE:_** To allow for more complicated USB device setups, the development make rule increases the USB memory in the systems Grub configuration to 1000 MB.
+
 ### Update Development Environment
 #### Update Base-Images
 re-run `BUILD_LOCAL=1 make update`

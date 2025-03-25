@@ -86,7 +86,7 @@ else
   if [ -z "${BUILD_TAR}" ] ; then
     # local build (BUILD_LOCAL)
     set -x
-    docker build \
+    docker buildx build --load --progress=plain \
       ${TAG_ARG} \
       -f ${DOCKERFILE} \
       ${BUILD_ARGS} \

@@ -54,9 +54,6 @@ services:
     extends:
       file: deploy/compose-files/docker-compose.rest_api.yml
       service: rest_api
-    depends_on:
-      controller:
-        condition: service_healthy
     environment:
       # separate multiple usernames or passwords with '#'
       - LOGIN_USER_NAMES=databeam

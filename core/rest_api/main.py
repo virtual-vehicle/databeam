@@ -1,7 +1,7 @@
 """
 Starts the Rest API and WebGUI.
 """
-
+import secrets
 import threading
 from pathlib import Path
 import queue
@@ -30,11 +30,13 @@ class RestEnv:
     DB_ROUTER = environ.var(help='DataBeam router hostname to find other nodes', default='localhost')
     # separate multiple usernames or passwords with '#'
     LOGIN_USER_NAMES = environ.var(help='User names for login', default='databeam')
-    LOGIN_PASSWORD_HASHES = environ.var(help='sha256 hash of rest api password as hex string')
     # create password hashes with
     # hashlib.sha256("plaintext".encode('utf-8')).hexdigest()
     # or
     # echo -n "plaintext" | sha256sum | tr -d "[:space:]-"
+    LOGIN_PASSWORD_HASHES = environ.var(help='sha256 hash of rest api password as hex string')
+    # optionally provide an external secret key (https://flask.palletsprojects.com/en/stable/quickstart/#sessions)
+    SECRET_KEY = environ.var(help='secret key for flask', default=secrets.token_hex())
 
 
 # Press the green button in the gutter to run the script.
@@ -92,7 +94,8 @@ if __name__ == '__main__':
                           shutdown_queue=shutdown_queue, login_user_names_str=env_cfg.LOGIN_USER_NAMES,
                           login_password_hashes_str=env_cfg.LOGIN_PASSWORD_HASHES,
                           data_dir=env_cfg.DATA_DIR / env_cfg.DEPLOY_VERSION,
-                          logs_dir=env_cfg.LOGS_DIR / env_cfg.DEPLOY_VERSION)
+                          logs_dir=env_cfg.LOGS_DIR / env_cfg.DEPLOY_VERSION,
+                          secret_key=env_cfg.SECRET_KEY)
 
     # wait for signals
     shutdown_ev.wait()

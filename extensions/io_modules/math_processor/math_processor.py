@@ -8,28 +8,39 @@ import ast
 import operator as op
 from dataclasses import dataclass
 import math
+import builtins
+from functools import cache
 
 import environ
 
 from vif.data_interface.module_interface import main
 from vif.data_interface.io_module import IOModule
-
-from io_modules.math_processor.config import MathProcessorConfig
-
 from vif.data_interface.network_messages import Status
 
+from io_modules.math_processor.config import MathProcessorConfig
 
 # https://stackoverflow.com/a/9558001
 # and similar to https://github.com/danthedeckie/simpleeval/blob/master/simpleeval.py
 # with help from https://stackoverflow.com/a/69644059
 # and https://stackoverflow.com/a/68732605
 
+MATH_FUNCTIONS = {f: getattr(math, f) for f in dir(math) if "__" not in f}
+BUILTIN_FUNCTIONS = {f: getattr(builtins, f) for f in ['min', 'max', 'abs', 'pow']}
 
-def checkmath(x, *args):
-    if x not in [f for f in dir(math) if "__" not in f]:
-        msg = f"Unknown math func {x}()"
-        raise SyntaxError(msg)
-    fun = getattr(math, x)
+
+def check_math(x: str, *args):
+    @cache
+    def get_fun(x_: str):
+        if x_ in BUILTIN_FUNCTIONS:
+            func = BUILTIN_FUNCTIONS[x_]
+        elif x_ in MATH_FUNCTIONS:
+            func = MATH_FUNCTIONS[x_]
+        else:
+            msg = f"Unknown math function: {x_}()"
+            raise SyntaxError(msg)
+        return func
+
+    fun = get_fun(x)
     return fun(*args)
 
 
@@ -40,7 +51,7 @@ operators = {ast.Add: op.add,
              ast.Div: op.truediv,
              ast.Mod: op.mod,
              ast.Pow: op.pow,
-             ast.Call: checkmath,
+             ast.Call: check_math,
              ast.BitXor: op.xor,
              ast.USub: op.neg,  # unary minus
              ast.UAdd: op.pos,  # unary plus
@@ -50,17 +61,13 @@ operators = {ast.Add: op.add,
 
 def eval_expr(expr, values_dict):
     """
-    >>> eval_expr('2^6')
-    4
-    >>> eval_expr('2**6')
-    64
-    >>> eval_expr('1 + 2*3**(4^5) / (6 + -7)')
-    -5.0
+    >>> eval_expr(ast.parse('var + 2*3**(4^5) / max(6, -7)', mode='eval').body, {'var': 41.0})
+    42.0
     """
-    return eval_(ast.parse(expr, mode='eval').body, values_dict)
+    return eval_(expr, values_dict)
 
 
-def eval_(node, values_dict):
+def eval_(node: Union[ast.Constant, ast.UnaryOp, ast.BinOp, ast.Name, ast.Call], values_dict):
     match node:
         case ast.Constant(value) if isinstance(value, int):
             return value
@@ -74,7 +81,7 @@ def eval_(node, values_dict):
             return operators[type(op)](eval_(operand, values_dict))
         case value if isinstance(value, ast.Call):
             args = [eval_(x, values_dict) for x in node.args]
-            return checkmath(node.func.id, *args)
+            return check_math(node.func.id, *args)
         case _:
             raise TypeError(node)
 
@@ -92,7 +99,6 @@ class ModuleEnv:
 
 
 class MathProcessor(IOModule):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -102,6 +108,8 @@ class MathProcessor(IOModule):
 
         self.variables_to_mod_channel: Dict[str, Var] = {}
         self.syntax_error_shown = False
+
+        self.math_expr: Optional[ast.expr] = None
 
     def command_validate_config(self, config) -> Status:
         # compare lengths of all lists
@@ -172,6 +180,8 @@ class MathProcessor(IOModule):
 
             self.module_interface.live_data_receiver.request_live_data(modules=modules, sub_all=sub_all,
                                                                        data_callback=self._data_received, db_ids=dbids)
+
+            self.math_expr = ast.parse(self.config_handler.config['calculation'], mode='eval').body
             return Status(error=False)
 
         except Exception as e:
@@ -201,7 +211,7 @@ class MathProcessor(IOModule):
             values = {k: v.value for k, v in self.variables_to_mod_channel.items()}
             # check if any value is None
             if not any(v is None for v in values.values()):
-                result = eval_expr(self.config_handler.config['calculation'], values)
+                result = eval_expr(self.math_expr, values)
                 self.data_broker.data_in(time.time_ns(), {self.config_handler.config['result_channel_name']: result})
         except SyntaxError as e:
             if not self.syntax_error_shown:

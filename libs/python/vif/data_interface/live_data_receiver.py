@@ -48,7 +48,7 @@ class LiveDataReceiver(LoggerMixin):
 
         # remove unused subscriptions
         for t in remove_list:
-            self._cm.unsubscribe(self._subs[t][2], self._subs[t][0])
+            self._cm.unsubscribe(self._subs[t][0])
             del self._subs[t]
 
         # subscribe for new modules
@@ -69,7 +69,7 @@ class LiveDataReceiver(LoggerMixin):
     def shutdown(self):
         self.logger.debug('shutting down')
         for value in self._subs.values():
-            self._cm.unsubscribe(value[2], value[0])
+            self._cm.unsubscribe(value[0])
         self._subs.clear()
 
     def _data_received(self, db_id: str, module_name: str, key: str, data: bytes) -> None:

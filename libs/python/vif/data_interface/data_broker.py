@@ -268,7 +268,6 @@ def _live_proc(shutdown_ev: multiprocessing.synchronize.Event,
 
             except Exception as _e:
                 logger.error(f'EX receiver {type(_e).__name__}: {_e}\n{traceback.format_exc()}')
-                break
 
     def _thread_live_decimated():
         nonlocal cm, current_data, data_update_lock, data_updated_dec_available
@@ -294,7 +293,6 @@ def _live_proc(shutdown_ev: multiprocessing.synchronize.Event,
                     cm.publish(pub_key_livedec, current_data_copy)
             except Exception as _e:
                 logger.error(f'EX live_decimated {type(_e).__name__}: {_e}\n{traceback.format_exc()}')
-                break
         g.close()
 
     try:

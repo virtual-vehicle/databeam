@@ -87,6 +87,9 @@ EOF
 fi
 
 printf "\ncleanup ..\n"
+# create config and data directories with writeable access for docker-group
+sudo mkdir -p $ROOT_DIR/config
+sudo mkdir -p $ROOT_DIR/data
 # change ownership to docker group (we need to be part of it anyways)
 sudo chgrp -R docker $ROOT_DIR
 # grant write access to group

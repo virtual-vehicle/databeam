@@ -9,19 +9,18 @@ from typing import Optional, Dict, List
 import os
 import queue
 from pathlib import Path
-
-import docker
-import flask
-import flask_login
-import zipfly
 import json
 import random
 import string
 import hashlib
 
+import docker
+import flask
+import flask_login
+import zipfly
+
 from flask import Flask, render_template, request, jsonify, make_response, stream_with_context, send_from_directory
 from flask_cors import CORS
-from flask_login import LoginManager, login_manager
 from werkzeug.serving import make_server, BaseWSGIServer
 
 from vif.logger.logger import LoggerMixin
@@ -40,7 +39,7 @@ class User(flask_login.UserMixin):
 
 class Server(LoggerMixin):
     def __init__(self, *args, controller_api: ControllerAPI, file_api: FileAPI, preview_api: PreviewAPI, shutdown_queue,
-                 login_user_names_str: str, login_password_hashes_str: str, data_dir, logs_dir, **kwargs):
+                 login_user_names_str: str, login_password_hashes_str: str, data_dir, logs_dir, secret_key, **kwargs):
         super().__init__(*args, **kwargs)
 
         self._controller_api: ControllerAPI = controller_api
@@ -68,8 +67,7 @@ class Server(LoggerMixin):
         self._docker_client: docker.DockerClient = docker.from_env()
 
         # create random hash padding
-        self._random_hash_padding: str = ''.join(random.choice(string.ascii_letters) for i in range(10))
-        self.logger.debug("Login Padding: " + self._random_hash_padding)
+        self._random_hash_padding: str = ''.join(random.choice(string.ascii_letters) for _ in range(10))
 
         # create user database from env
         self._user_name_list: List[str] = login_user_names_str.split("#")
@@ -77,7 +75,8 @@ class Server(LoggerMixin):
         self._user_dict: Dict[str, str] = {k: v for k, v in zip(self._user_name_list, self._password_hashes_list)}
 
         self.app: Flask = Flask("REST Server")
-        self.app.secret_key: str = "akenri129ekrnek29"
+        # set a random string
+        self.app.secret_key: str = secret_key
         self._login_manager: flask_login.LoginManager = flask_login.LoginManager(self.app)
         self._login_manager.init_app(self.app)
         self._login_manager.user_loader(self.user_loader)

@@ -1,3 +1,4 @@
 *.mcap
 *.json
 *.csv
+*.npy

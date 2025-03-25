@@ -291,20 +291,33 @@ class RouterConnection(LoggerMixin):
         self._topic_transfer_q.put((True, str(key)))
         return sub_id
 
-    def unsubscribe(self, key: Key, sub_id: int) -> None:
+    def unsubscribe(self, sub_id: int) -> None:
         try:
             with self._subscribers_lock:
+                remove_key = None
                 remove_index = None
-                for idx, cb in enumerate(self._subscribers[str(key)]):
-                    if cb[0] == sub_id:
-                        remove_index = idx
+                # find key for sub_id
+                for key, sub_list in self._subscribers.items():
+                    # find ID of callback in list
+                    for idx, cb in enumerate(sub_list):
+                        if cb[0] == sub_id:
+                            remove_key = key
+                            remove_index = idx
+                            break
+                    if remove_key is not None:
                         break
-                assert remove_index is not None, f'cannot find subscriber id {sub_id} (key {key})'
-                self._subscribers[str(key)].pop(remove_index)
 
-                if len(self._subscribers[str(key)]) == 0:
-                    # no callbacks left, unsubscribe
-                    self._topic_transfer_q.put((False, str(key)))
+                if remove_key is None or remove_index is None:
+                    self.logger.debug('unsubscribe: cannot find subscriber id %d', sub_id)
+                    return
+
+                self.logger.debug('unsubscribe from %s with id %d', remove_key, sub_id)
+                self._subscribers[remove_key].pop(remove_index)
+
+                if len(self._subscribers[remove_key]) == 0:
+                    # no callbacks left, unsubscribe and remove topic key
+                    self._topic_transfer_q.put((False, remove_key))
+                    self._subscribers.pop(remove_key)
         except Exception as e:
             self.logger.error(f'EX unsubscribe ({type(e).__name__}): {e}\n{traceback.format_exc()}')
 
@@ -422,10 +435,12 @@ class ConnectionManager(LoggerMixin):
                 self._add_external_router_connection(key.db_id)  # TODO (for all "adds"): raise s/t useful if it fails
             return self._router_connections[key.db_id].subscribe(key, cb)
 
-    def unsubscribe(self, key: Key, sub_id: int) -> None:
+    def unsubscribe(self, sub_id: int) -> None:
         assert self.initialized, 'connection manager not initialized'
         with self._router_connections_lock:
-            self._router_connections[key.db_id].unsubscribe(key, sub_id)
+            # instruct all connections to unsubscribe, since we don't know the db_id the subscription is on
+            for nc in self._router_connections.values():
+                nc.unsubscribe(sub_id)
 
     def declare_publisher(self, key: Key) -> int:
         return 0
@@ -444,13 +459,31 @@ if __name__ == '__main__':
     cm = ConnectionManager(router_hostname='localhost', db_id='dbid', node_name='test', shutdown_event=None)
     logging.info('whee')
 
-
     def q_cb(data) -> bytes:
         logging.info(f'q_cb {data}')
         return b'answer'
+    _ = cm.declare_queryable(Key('dbid', 'test', 'bla'), q_cb)
 
+    def sub_cb(topic, rx_msg):
+        logging.info(f'topic {topic}: {rx_msg}')
 
-    _ = cm.declare_queryable(Key('dbid', 'c', 'bla'), q_cb)
+    sub_id_1 = cm.subscribe(Key('dbid', 'm/liveall', 'bla1'), sub_cb)
+    sub_id_2 = cm.subscribe(Key('dbid', 'm/liveall', 'bla2'), sub_cb)
+    time.sleep(0.2)
+    for rc in cm._router_connections.values():
+        logging.info(rc._subscribers)
+    cm.unsubscribe(sub_id_1)
+    time.sleep(0.2)
+    for rc in cm._router_connections.values():
+        logging.info(rc._subscribers)
+    cm.unsubscribe(sub_id_1)
+    time.sleep(0.2)
+    for rc in cm._router_connections.values():
+        logging.info(rc._subscribers)
+    cm.unsubscribe(sub_id_2)
+    time.sleep(0.2)
+    for rc in cm._router_connections.values():
+        logging.info(rc._subscribers)
 
     # pubs = []
     # i = cm.declare_publisher('pub/bla')

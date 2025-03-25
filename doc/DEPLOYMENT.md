@@ -22,6 +22,9 @@ This copies files and sets up Docker (plus configuration) and other requirements
 
 The current configuration in `.env` and `docker-compose.yml` will be copied to the target machine. Make sure to adjust values there.
 
+> **_NOTE:_** To allow for more complicated USB device setups, the deployment scripts increase the USB memory in the target systems Grub configuration to 1000 MB.
+
+
 ### docker-compose.yml
 
 Existing modules already have entries in the `docker-compose.yml` file and examples in the `deploy/compose-files` directory.
