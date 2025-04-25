@@ -2,5 +2,6 @@
 
 # module-specific dependencies:
 -i https://pypi.org/simple
-pynmeagps
 pyserial
+pynmeagps
+pygnssutils

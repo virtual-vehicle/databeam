@@ -3,14 +3,16 @@
 #include "DataBroker.h"
 #include "JsonWriter.h"
 #include "TimeSource.h"
+#include "Utils.h"
 
 void* all_thread(void* data_broker_ptr) 
 {
     DataBroker* data_broker = (DataBroker*) data_broker_ptr;
-    AsyncQueue<std::string>* all_queue = data_broker->getAllQueue();
+    AsyncQueue<LiveDataBlock>* all_queue = data_broker->getAllQueue();
     Logger* logger = data_broker->getLogger();
     ConnectionManager* cm = data_broker->getConnectionManager();
     std::string topic = data_broker->getAllTopic();
+    std::vector<std::string> schema_all_topics = data_broker->GetSchemaAllTopics();
 
     //log thread start
     logger->debug("[Live-Data] 'All' Thread Started");
@@ -18,16 +20,24 @@ void* all_thread(void* data_broker_ptr)
     while(true)
     {
         //get next sample from queue
-        std::string sample = all_queue->pop();
+        LiveDataBlock sample = all_queue->pop();
 
         //kill thread
-        if(sample == "") break;
+        if(sample.schema_index < 0) break;
 
         //log sample
         //logger->debug("Publish All");
 
+        if(sample.schema_index < (int)schema_all_topics.size())
+        {
+            cm->publish(schema_all_topics[sample.schema_index], sample.json_data_string);
+        }
+
         //publish sample
-        cm->publish(topic, sample);
+        /*if(sample.schema_index == 0) 
+        {
+            cm->publish(topic, sample.json_data_string);
+        }*/
     }
 
     //log thread shutdown
@@ -40,10 +50,11 @@ void* all_thread(void* data_broker_ptr)
 void* fixed_thread(void* data_broker_ptr) 
 {
     DataBroker* data_broker = (DataBroker*) data_broker_ptr;
-    AsyncQueue<std::string>* fixed_queue = data_broker->getFixedQueue();
+    AsyncQueue<LiveDataBlock>* fixed_queue = data_broker->getFixedQueue();
     Logger* logger = data_broker->getLogger();
     ConnectionManager* cm = data_broker->getConnectionManager();
     std::string fixed_topic = data_broker->getFixedTopic();
+    std::vector<std::string> schema_fixed_topics = data_broker->GetSchemaFixedTopics();
 
     //log thread start
     logger->debug("[Live-Data] 'Fixed' Thread Started");
@@ -51,16 +62,24 @@ void* fixed_thread(void* data_broker_ptr)
     while(true)
     {
         //get next sample from queue
-        std::string sample = fixed_queue->pop();
+        LiveDataBlock sample = fixed_queue->pop();
 
         //kill thread
-        if(sample == "") break;
+        if(sample.schema_index < 0) break;
 
         //log sample
         //logger->debug("Publish Fixed");
 
-        //publish sample
-        cm->publish(fixed_topic, sample);
+        if(sample.schema_index < (int)schema_fixed_topics.size())
+        {
+            cm->publish(schema_fixed_topics[sample.schema_index], sample.json_data_string);
+        }
+
+        /*if(sample.schema_index == 0)
+        {
+            //publish sample
+            cm->publish(fixed_topic, sample.json_data_string);
+        }*/
     }
 
     //log thread shutdown
@@ -74,6 +93,8 @@ DataBroker::DataBroker()
 {
     //allocate mcap writer
     mcap_writer = new mcap::McapWriter();
+    kill_live_data_block.schema_index = -1;
+    kill_live_data_block.json_data_string = "";
 }
 
 DataBroker::~DataBroker()
@@ -82,13 +103,22 @@ DataBroker::~DataBroker()
     if(mcap_writer != nullptr) delete mcap_writer;
 }
 
-void DataBroker::shutdown()
+void DataBroker::start_threads()
 {
-    logger->debug("DataBroker shutdown.");
+    //create parse thread
+    int all_return_value = pthread_create(&all_thread_id, NULL, all_thread, (void *)this);
+    int fixed_return_value = pthread_create(&fixed_thread_id, NULL, fixed_thread, (void *)this);
 
+    //log error if thread could not be created
+    if(all_return_value != 0) logger->error("[Live-Data] 'All' thread created with error: " + std::to_string(all_return_value));
+    if(fixed_return_value != 0) logger->error("[Live-Data] 'Fixed' thread created with error: " + std::to_string(fixed_return_value));
+}
+
+void DataBroker::stop_threads()
+{
     //empty string kills thread
-    all_queue.push("");
-    fixed_queue.push("");
+    all_queue.push(kill_live_data_block);
+    fixed_queue.push(kill_live_data_block);
 
     //join with threads
     void* all_return_value;
@@ -99,36 +129,45 @@ void DataBroker::shutdown()
     //check return values
     if(all_join_return_value != 0) logger->error("[Live-Data] 'All' thread joined with error.");
     if(fixed_join_return_value != 0) logger->error("[Live-Data] 'Fixed' thread joined with error.");
+}
 
+void DataBroker::shutdown()
+{
+    logger->debug("DataBroker shutdown.");
+
+    stop_threads();
+
+    logger->debug("DataBroker Threads joined.");
+
+    //delete mcap writer
     if(mcap_writer != nullptr) delete mcap_writer;
     mcap_writer = nullptr;
 }
 
-void DataBroker::init(ConnectionManager* connection_manager, DataConfig* data_config, 
-    Logger* logger, std::string all_topic, std::string fixed_topic)
+void DataBroker::init(ConnectionManager* connection_manager, DataConfig* data_config, Logger* logger, 
+    std::string db_id, std::string module_name)
 {
     //store parameters
     this->connection_manager = connection_manager;
     this->data_config = data_config;
+    this->db_id = db_id;
+    this->module_name = module_name;
     this->logger = logger;
-    this->all_topic = all_topic;
-    this->fixed_topic = fixed_topic;
 
-    //create parse thread
-    int all_return_value = pthread_create(&all_thread_id, NULL, all_thread, (void *)this);
-    int fixed_return_value = pthread_create(&fixed_thread_id, NULL, fixed_thread, (void *)this);
+    //init all and fixed topics
+    this->all_topic = db_id + "/m/" + module_name + "/liveall";
+    this->fixed_topic = db_id + "/m/" + module_name + "/livedec";
 
-    //log error if thread could not be created
-    if(all_return_value != 0) logger->error("[Live-Data] 'All' thread created with error: " + std::to_string(all_return_value));
-    if(fixed_return_value != 0) logger->error("[Live-Data] 'Fixed' thread created with error: " + std::to_string(fixed_return_value));
+    //start all and fixed threads
+    start_threads();
 }
 
-AsyncQueue<std::string>* DataBroker::getAllQueue()
+AsyncQueue<LiveDataBlock>* DataBroker::getAllQueue()
 {
     return &all_queue;
 }
 
-AsyncQueue<std::string>* DataBroker::getFixedQueue()
+AsyncQueue<LiveDataBlock>* DataBroker::getFixedQueue()
 {
     return &fixed_queue;
 }
@@ -151,6 +190,16 @@ std::string DataBroker::getAllTopic()
 std::string DataBroker::getFixedTopic()
 {
     return fixed_topic;
+}
+
+std::vector<std::string> DataBroker::GetSchemaAllTopics()
+{
+    return this->schema_all_topics;
+}
+
+std::vector<std::string> DataBroker::GetSchemaFixedTopics()
+{
+    return this->schema_fixed_topics;
 }
 
 void DataBroker::lock()
@@ -275,6 +324,8 @@ bool DataBroker::startSampling()
 
     lock();
     current_ts = 0;
+    current_ts_list.clear();
+    for(unsigned int i = 0; i < schema_all_topics.size(); i++) current_ts_list.push_back(0);
     this->sampling_running = true;
     unlock();
 
@@ -299,8 +350,33 @@ bool DataBroker::getSamplingRunning()
     return this->sampling_running;
 }
 
+void DataBroker::setSchemas(std::vector<McapSchema>& schema_list)
+{
+    stop_threads();
+
+    //clear all schema topics
+    schema_all_topics.clear();
+    schema_fixed_topics.clear();
+
+    //create new list of topics for each schema
+    for(unsigned int i = 0; i < schema_list.size(); i++)
+    {
+        std::string topic = schema_list[i].get_topic();
+        schema_all_topics.push_back(this->db_id + "/m/" + this->module_name + "/" + topic + "/liveall") ;
+        schema_fixed_topics.push_back(db_id + "/m/" + module_name + "/" + topic + "/livedec");
+    }
+
+    logger->debug("Schema All Topics: " + Utils::vectorToString(schema_all_topics));
+    logger->debug("Schema Fixed Topics: " + Utils::vectorToString(schema_fixed_topics));
+
+    start_threads();
+}
+
 void DataBroker::data_in(long long timestamp, JsonWriter &json_writer, unsigned int schema_index, bool mcap, bool live, bool latest)
 {
+    if(!sampling_running)
+        return;
+
     //points to either latest or live json writer if live flag is set
     JsonWriter* temp_live_writer = nullptr;
 
@@ -358,31 +434,34 @@ void DataBroker::data_in(long long timestamp, JsonWriter &json_writer, unsigned 
         //forward all samples if enabled
         if(data_config->getAllEnabled())
         {
-            all_queue.push(*temp_live_writer->getStringPtr());
+            LiveDataBlock data_block = {(int)schema_index, *temp_live_writer->getStringPtr()};
+            all_queue.push(data_block);
         }
 
         //forward fixed samples if enabled
         if(data_config->getFixedEnabled())
         {
-            if(current_ts == 0)
+            if(current_ts_list[schema_index] == 0)
             {
-                current_ts = timestamp;
-                fixed_queue.push(*temp_live_writer->getStringPtr());
+                current_ts_list[schema_index] = timestamp;
+                LiveDataBlock data_block = {(int)schema_index, *temp_live_writer->getStringPtr()};
+                fixed_queue.push(data_block);
             }
             else
             {
-                double delta_ts = (double)(timestamp - current_ts) * 0.000000001;
+                double delta_ts = (double)(timestamp - current_ts_list[schema_index]) * 0.000000001;
                 
                 if(delta_ts >= data_config->getFixedDeltaTime())
                 {
-                    current_ts = timestamp;
-                    fixed_queue.push(*temp_live_writer->getStringPtr());
+                    current_ts_list[schema_index] = timestamp;
+                    LiveDataBlock data_block = {(int)schema_index, *temp_live_writer->getStringPtr()};
+                    fixed_queue.push(data_block);
                 }
             }
         }
         else
         {
-            current_ts = 0;
+            current_ts_list[schema_index] = 0;
         }
     }
 }

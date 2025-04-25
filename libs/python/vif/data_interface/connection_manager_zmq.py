@@ -13,7 +13,7 @@ import zmq
 import environ
 
 from vif.logger.logger import LoggerMixin
-from vif.zmq.helpers import create_connect, flush_queue_sync
+from vif.zmq.helpers import create_connect, create_bind, flush_queue_sync
 
 
 class ConnectionException(Exception):
@@ -66,6 +66,13 @@ class QueryableEnvelope:
         return cls(ident=data[0].decode(), uuid=data[1], topic=data[2].decode(), payload=data[3])
 
     def to_multipart(self):
+        try:
+            assert isinstance(self.ident, str)
+            assert isinstance(self.uuid, bytes)
+            assert isinstance(self.topic, str)
+            assert isinstance(self.payload, bytes)
+        except AssertionError:
+            logging.getLogger('QueryableEnvelope').error(f'EX invalid: {str(self)}')
         return [self.ident.encode(), self.uuid, self.topic.encode(), self.payload]
 
     def __str__(self):
@@ -82,7 +89,7 @@ class BrokerEnv:
 
 class RouterConnection(LoggerMixin):
     def __init__(self, *args, db_id: str, router_hostname: str, node_name: str = '', max_parallel_req: int = 1,
-                 **kwargs):
+                 max_parallel_queryables: int = 1, **kwargs):
         """
 
         """
@@ -131,7 +138,8 @@ class RouterConnection(LoggerMixin):
         self._subscribe_thread.start()
 
         if len(self._node_name) > 0:
-            self._queryable_thread = threading.Thread(target=self._queryable_worker, name='queryable_worker')
+            self._queryable_thread = threading.Thread(target=self._queryable_worker, args=(max_parallel_queryables,),
+                                                      name='queryable_worker')
             self._queryable_thread.start()
         else:
             # external routers do not support queries
@@ -150,21 +158,17 @@ class RouterConnection(LoggerMixin):
                 sock = self._query_req_socks.get()
                 sock.close()
 
-    def _queryable_worker(self) -> None:
-        logger = logging.getLogger('_queryable_worker')
-        ident_key = Key(db_id=self._db_id, node_name=self._node_name, topic='-')
-        logger.debug('identity: %s', ident_key.ident)
-        # TODO check if our ID is already registered by someone .. how?
-        #  set uuid ident and ask + register a default-queryable here?
+    def _queryable_worker_thread(self, wid: int, shutdown_ev: threading.Event, process_queue: queue.Queue) -> None:
+        logger = logging.getLogger(f'_queryable_worker_thread_{wid}')
+        try:
+            reply_sock = create_connect('inproc://query_worker', zmq, zmq.PUSH, timeout_ms=1000)
+        except Exception as e:
+            logger.error(f'EX creation ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+            return
 
-        sock = create_connect(f'tcp://{self._router_hostname}:{self._ports.DB_ROUTER_BACKEND_PORT}',
-                              zmq, zmq.DEALER, identity=ident_key.ident.encode(), timeout_ms=100)
-        sock.setsockopt(zmq.RCVHWM, 10000)
-        sock.setsockopt(zmq.SNDHWM, 10000)
-
-        while not self._shutdown_ev.is_set():
+        while not shutdown_ev.is_set():
             try:
-                msg = QueryableEnvelope.from_multipart(sock.recv_multipart())
+                msg = process_queue.get(timeout=0.2)
                 # logger.debug('rx from %s: %s', msg.ident, msg)
                 key = Key.from_ident_topic(msg.ident, msg.topic)
 
@@ -172,7 +176,7 @@ class RouterConnection(LoggerMixin):
                 with self._queryables_lock:
                     cb = self._queryables.get(key.topic)
                 if cb is None:
-                    logger.warning(f'no callback registered for topic {key}')
+                    logger.warning(f'no callback registered for topic {key.topic} in node {self._node_name}')
                     continue
                 new_payload = cb(msg.payload)
 
@@ -183,14 +187,72 @@ class RouterConnection(LoggerMixin):
                 else:
                     msg.payload = new_payload
 
-                # return payload
-                sock.send_multipart(msg.to_multipart())
+                reply_sock.send_multipart(msg.to_multipart())
+            except queue.Empty:
+                continue
+            except Exception as e:
+                logger.error(f'EX ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+
+        reply_sock.close()
+        logger.debug('exiting')
+
+    def _queryable_worker(self, max_parallel_queryables: int) -> None:
+        logger = logging.getLogger('_queryable_worker')
+        ident_key = Key(db_id=self._db_id, node_name=self._node_name, topic='-')
+        logger.debug('identity: %s, max_parallel_queryables: %d', ident_key.ident, max_parallel_queryables)
+        # TODO check if our ID is already registered by someone .. how?
+        #  set uuid ident and ask + register a default-queryable here?
+
+        sock = create_connect(f'tcp://{self._router_hostname}:{self._ports.DB_ROUTER_BACKEND_PORT}',
+                              zmq, zmq.DEALER, identity=ident_key.ident.encode(), timeout_ms=100)
+        sock.setsockopt(zmq.RCVHWM, 10000)
+        sock.setsockopt(zmq.SNDHWM, 10000)
+
+        # collect replies from queryable workers (which process callbacks)
+        sock_worker_rx = create_bind('inproc://query_worker', zmq, zmq.PULL, timeout_ms=100)
+        self._shutdown_ev.wait(0.1)  # PUSH-PULL pattern requires bind-before-connect
+
+        # start queryable worker threads
+        worker_pool = []
+        worker_shutdown_ev = threading.Event()
+        worker_processing_queue = queue.Queue()
+        for i in range(max_parallel_queryables):
+            thread = threading.Thread(target=self._queryable_worker_thread,
+                                      args=(i, worker_shutdown_ev, worker_processing_queue,),
+                                      name=f'queryable_worker_th_{i}')
+            worker_pool.append(thread)
+            thread.start()
+
+        # use poller to receive new queries and replies from workers in parallel
+        poller = zmq.Poller()
+        poller.register(sock, zmq.POLLIN)
+        poller.register(sock_worker_rx, zmq.POLLIN)
+
+        while not self._shutdown_ev.is_set():
+            try:
+                socks = dict(poller.poll(timeout=100))
+                if socks.get(sock) == zmq.POLLIN:
+                    # received a query request
+                    qry_msg = QueryableEnvelope.from_multipart(sock.recv_multipart())
+                    worker_processing_queue.put(qry_msg)
+
+                if socks.get(sock_worker_rx) == zmq.POLLIN:
+                    # received a reply from a worker
+                    reply_msg = sock_worker_rx.recv_multipart()
+                    # send reply to original client
+                    sock.send_multipart(reply_msg)
             except zmq.Again:
                 continue  # timeout: nothing received
             except Exception as e:
                 logger.error(f'EX ({type(e).__name__}): {e}\n{traceback.format_exc()}')
 
         sock.close()
+        logger.debug('closing worker threads')
+        worker_shutdown_ev.set()
+        for thread in worker_pool:
+            if thread.is_alive():
+                thread.join()
+        sock_worker_rx.close()  # must be closed AFTER all worker threads have terminated
         logger.debug('exiting')
 
     def declare_queryable(self, key: Key, cb: Callable[[bytes], str | bytes]) -> str:
@@ -336,13 +398,15 @@ class RouterConnection(LoggerMixin):
 
 class ConnectionManager(LoggerMixin):
     def __init__(self, *args, router_hostname: str, db_id: str, node_name: str = '',
-                 shutdown_event: Optional[threading.Event] = None, max_parallel_req: int = 1, **kwargs):
+                 shutdown_event: Optional[threading.Event] = None, max_parallel_req: int = 1,
+                 max_parallel_queryables: int = 1, **kwargs):
         """
         @param router_hostname: hostname of router
         @param db_id: databeam ID
         @param node_name: identifier of process
         @param shutdown_event: shutdown event
         @param max_parallel_req: maximum number of parallel requests
+        @param max_parallel_queryables: maximum number of parallel queryable workers
         """
         super().__init__(*args, **kwargs)
 
@@ -366,7 +430,8 @@ class ConnectionManager(LoggerMixin):
         self._router_connections_lock = threading.Lock()
         self._router_connections: Dict[str, RouterConnection] = {
             self._db_id: RouterConnection(db_id=self._db_id, router_hostname=self._router_hostname,
-                                          node_name=self._node_name, max_parallel_req=max_parallel_req)
+                                          node_name=self._node_name, max_parallel_req=max_parallel_req,
+                                          max_parallel_queryables=max_parallel_queryables)
         }
 
         # list of databeam IDs and hostnames

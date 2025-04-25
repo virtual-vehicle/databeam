@@ -92,11 +92,29 @@ class Server:
         modules_list = [x['name'] for x in modules_dict['modules'] if x['name'] != 'Plotter']
 
         meta_dict = {}
+        topics_dict = {}
 
         for module in modules_list:
             meta_dict[module] = self.get_module_meta(module)
+            topics_dict[module] = self.get_module_schemas(module)
 
-        return {'modules': modules_list, 'meta': meta_dict}
+        self.logger.debug({'modules': modules_list, 'meta': meta_dict, 'topics': topics_dict})
+
+        module_topic_list = []
+        topic_meta_dict = {}
+
+        for module in modules_list:
+            if len(topics_dict[module]) == 0:
+                module_topic_list.append(module)
+                topic_meta_dict[module] = meta_dict[module]
+                continue
+
+            for topic in topics_dict[module]:
+                module_topic_list.append(f'{module}/{topic}')
+                topic_meta_dict[f'{module}/{topic}'] = meta_dict[module]
+
+        #return {'modules': modules_list, 'meta': meta_dict, 'topics': topics_dict}
+        return {'modules': module_topic_list, 'meta': topic_meta_dict, 'topics': [] * len(module_topic_list)}
 
     def get_module_meta(self, module_name):
         try:
@@ -104,3 +122,11 @@ class Server:
             return json.loads(reply)
         except:
             return {}
+
+    def get_module_schemas(self, module_name):
+        try:
+            reply = self.cm.request(Key(self._databeam_id, f'm/{module_name}', 'get_schemas'))
+            topic_names = json.loads(reply)['topic_names']
+            return topic_names
+        except:
+            return []

@@ -55,9 +55,9 @@ class DefaultMessageWriter(IMessageWriter):
 
 class OscilloscopeMessageWriter(IMessageWriter):
     """
-    A writer specialized on oscilloscope data in shape of lists. Writes a list of values
-    into a single column in different rows. A rel_time list is used to add the a time
-    passed since start of the oscilloscope window to the timestamp.
+    A writer specialized in oscilloscope data in the shape of lists. Writes a list of values
+    into a single column in different rows. A rel_time list is used to add the time
+    passed since the start of the oscilloscope window to the timestamp.
     """
 
     def write_line(self, message, data_dict, schema, csv_writer):
@@ -70,7 +70,7 @@ class OscilloscopeMessageWriter(IMessageWriter):
                 if isinstance(data_dict[key], list):
                     inject_dict[key] = data_dict[key][i]
                 elif key == "timestamp":
-                    pass  # Leave out timestamp, since it will later be included as ts.
+                    pass  # Leave out "timestamp", since it will later be included as "TS".
                 else:
                     inject_dict[key] = data_dict[key]
 
@@ -103,24 +103,23 @@ def meta_to_csv(measurement_path, module_name):
 
     with open(module_meta_path, "r") as f:
         meta_dict = json.load(f)
-        meta_dict['module_name'] = module_name
         config_dict = json.loads(meta_dict['config'])
         del config_dict['config_properties']
         del meta_dict['config']
 
-        # open csv file and write meta
+        # open the csv file and write meta
         csv_path.parent.mkdir(parents=True, exist_ok=True)
         with open(csv_path, "w", newline="") as csv_file:
             csv_writer = csv.writer(csv_file)
             for k, v in meta_dict.items():
                 csv_writer.writerow([k, v])
             for k, v in config_dict.items():
-                csv_writer.writerow([k, v])
+                csv_writer.writerow([f'config/{k}', v])
 
 
 def mcap_to_csv(measurement_path: Path, module_name: Optional[str] = None) -> None:
     measurement_path = Path(measurement_path)
-    # compute path to mcap and csv file
+    # compute a path to mcap and csv file
     if os.path.isfile(measurement_path):
         if module_name is not None:
             print("Error: module_name must be None if measurement_path is a file.")
@@ -134,7 +133,7 @@ def mcap_to_csv(measurement_path: Path, module_name: Optional[str] = None) -> No
         input_dir = measurement_path / module_name
         mcap_path = input_dir / (module_name + ".mcap")
 
-    # check if file exists
+    # check if the file exists
     if not os.path.exists(mcap_path):
         print("[Convert] " + mcap_path.name + " not found - skipping")
         return
@@ -144,7 +143,7 @@ def mcap_to_csv(measurement_path: Path, module_name: Optional[str] = None) -> No
         # create mcap reader
         reader = make_reader(f)
 
-        # get list of channels
+        # get a list of channels
         summary = reader.get_summary()
         total_messages = summary.statistics.message_count
         schemas = list(summary.schemas.values())
@@ -178,7 +177,7 @@ def mcap_to_csv(measurement_path: Path, module_name: Optional[str] = None) -> No
             csv_path = input_dir / "csv" / (ch.topic + ".csv")
             csv_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # open csv file
+            # open the csv file
             csv_file = open(csv_path, "w", newline="")
             csv_writer = csv.writer(csv_file)
 
@@ -187,7 +186,7 @@ def mcap_to_csv(measurement_path: Path, module_name: Optional[str] = None) -> No
             cnt = 0
             header_written = False
 
-            # Select line writer strategy based on schema topic
+            # Select a line writer strategy based on a schema topic
             line_writer = IMessageWriter.select_writer(ch.topic)
 
             # iterate messages
@@ -231,7 +230,7 @@ if __name__ == '__main__':
         # convert single mcap file
         mcap_to_csv(measurement_arg_path)
     else:
-        # convert whole measurement directory with module-directories
+        # convert the whole measurement directory with module-directories
         dirs = os.listdir(measurement_arg_path)
         modules = [x for x in dirs if x != "meta.json"]
         print("Modules: " + str(modules) + "\n")

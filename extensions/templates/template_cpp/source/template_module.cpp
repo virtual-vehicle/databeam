@@ -4,6 +4,7 @@
 #include "Logger.h"
 #include "Utils.h"
 #include "JsonWriter.h"
+#include "ConfigFactory.h"
 #include <unistd.h>
 
 void* worker_thread(void* io_module_ptr) 
@@ -53,18 +54,15 @@ void* worker_thread(void* io_module_ptr)
     pthread_exit(NULL);
 }
 
-std::string TemplateModule::default_config = R"(
-{
-  "some_value": "dummy",
-
-  "config_properties": {
-  }
-})";
-
 TemplateModule::TemplateModule(EnvConfig* env_config)
 {
     //store environment config
     this->env_config = env_config;
+
+    //generate config with default values via the config factory
+    ConfigFactory cfg;
+    cfg.string("some_value", "dummy");
+    default_config = cfg.get_json_str();
 
     //parse default config
     config_json.parse(default_config);
@@ -155,4 +153,13 @@ bool TemplateModule::stopSampling()
     // TODO
 
     return true;
+}
+
+std::vector<McapSchema> TemplateModule::getMcapSchemas()
+{
+    //create module schema list for mcap capture and live data forwarding
+    McapSchema module_schema;
+    module_schema.setTopic("template_schema");
+    module_schema.addProperty("CH_X", "number");
+    return std::vector<McapSchema>{module_schema};
 }

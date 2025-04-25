@@ -183,7 +183,7 @@ class LinePlot extends Plot
   }
 
   /*
-  plot(keys, values)
+  plot(keys, values, module_changed)
   {
     this.updateLines(keys, values)
 
@@ -217,9 +217,9 @@ class LinePlot extends Plot
   }
   */
 
-  plot(keys, values)
+  plot(keys, values, module_changed)
   {
-    this.updateLines(keys, values)
+    this.updateLines(keys, values, module_changed)
 
     let t = 0.0
 
@@ -310,9 +310,9 @@ class LinePlot extends Plot
     window.requestAnimationFrame(this.animationUpdate.bind(this))
   }
 
-  updateLines(keys, values)
+  updateLines(keys, values, module_changed)
   {
-    if(keys.length != this.num_lines)
+    if(keys.length != this.num_lines || module_changed)
     {
       this.removeAllLines()
       this.data = [[]]

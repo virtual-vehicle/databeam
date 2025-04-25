@@ -40,7 +40,7 @@ services:
     volumes:
       - ${ROOT_DIR}/config:${DB_CONFIG_DIRECTORY}
       - ${ROOT_DIR}/data:${DB_DATA_DIRECTORY}
-      - /etc/hostname:${HOST_NAME_FILE}
+      - /etc/hostname:${HOST_NAME_FILE}:ro
       - /tmp/databeam_hostcmd.sock:/tmp/databeam_hostcmd.sock
     restart: unless-stopped
     depends_on:
@@ -64,6 +64,7 @@ include:
   # - deploy/compose-files/docker-compose.autostart.yml
   # - deploy/compose-files/docker-compose.camera.yml
   # - deploy/compose-files/docker-compose.constant_publisher.yml
+  # - deploy/compose-files/docker-compose.filter.yml
   # - deploy/compose-files/docker-compose.gps_time_service.yml
   # - deploy/compose-files/docker-compose.math_processor.yml
   # - deploy/compose-files/docker-compose.nmea_gnss.yml

@@ -6,6 +6,7 @@ Also is able to start/stop sampling/capturing, and send system commands.
 
 import threading
 import json
+from typing import Optional
 
 from vif.data_interface.helpers import wait_for_controller
 
@@ -57,15 +58,9 @@ class ControllerAPI(LoggerMixin):
         json_str = data.decode('utf-8')
         self._websocket_api.broadcast_json_str("job", json_str)
 
-    def _handle_reply_exception(self, ex, reply, func_name, target):
-        title: str = ""
-        message: str = ""
-
-        if reply is not None and reply.err is not None:
-            title = target + ": Network Error"
-            message = f">> {func_name} received (ERROR: '{reply.err.payload.to_string()}')"
-        elif type(ex).__name__ == 'StopIteration':
-            title = "Reply"
+    def _handle_reply_exception(self, ex: Exception, reply: Optional[bytes], func_name: str, target: str):
+        if reply is None or type(ex).__name__ == 'StopIteration':
+            title = target + ": Timeout Error"
             message = f'{func_name} - no reply from "{target}"'
         else:
             title = target + ": Unknown error"
@@ -219,7 +214,7 @@ class ControllerAPI(LoggerMixin):
         reply = None
         try:
             message = StartStop(cmd=StartStopCmd.START)
-            reply = self.cm.request(Key(self._databeam_id, 'c', 'cmd_capture'), message.serialize(), 2)
+            reply = self.cm.request(Key(self._databeam_id, 'c', 'cmd_capture'), message.serialize(), 3)
             message = StartStopReply.deserialize(reply)
             return message.get_dict()
         except Exception as e:
@@ -229,7 +224,7 @@ class ControllerAPI(LoggerMixin):
         reply = None
         try:
             message = StartStop(cmd=StartStopCmd.STOP)
-            reply = self.cm.request(Key(self._databeam_id, 'c', 'cmd_capture'), message.serialize(), 2)
+            reply = self.cm.request(Key(self._databeam_id, 'c', 'cmd_capture'), message.serialize(), 6)
             message = StartStopReply.deserialize(reply)
             return message.get_dict()
         except Exception as e:
@@ -239,17 +234,18 @@ class ControllerAPI(LoggerMixin):
         reply = None
         try:
             message = StartStop(cmd=StartStopCmd.START)
-            reply = self.cm.request(Key(self._databeam_id, 'c', 'cmd_sampling'), message.serialize(), 2)
+            reply = self.cm.request(Key(self._databeam_id, 'c', 'cmd_sampling'), message.serialize(), 3)
             message = StartStopReply.deserialize(reply)
             return message.get_dict()
         except Exception as e:
             return self._handle_reply_exception(e, reply, "send_command_start_sampling", "Controller")
 
     def send_command_stop_sampling(self) -> dict:
+        self.logger.debug('send_command_stop_sampling')
         reply = None
         try:
             message = StartStop(cmd=StartStopCmd.STOP)
-            reply = self.cm.request(Key(self._databeam_id, 'c', 'cmd_sampling'), message.serialize(), 2)
+            reply = self.cm.request(Key(self._databeam_id, 'c', 'cmd_sampling'), message.serialize(), 6)
             message = StartStopReply.deserialize(reply)
             return message.get_dict()
         except Exception as e:

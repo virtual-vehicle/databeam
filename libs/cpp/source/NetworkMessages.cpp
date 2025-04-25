@@ -260,6 +260,24 @@ std::string DocumentationReply::serialize()
 }
 
 // ===========================================================================
+// GetSchemasReply
+// ===========================================================================
+
+GetSchemasReply::GetSchemasReply(std::vector<std::string> topic_names)
+{
+    this->topic_names = topic_names;
+}
+
+std::string GetSchemasReply::serialize()
+{
+    JsonWriter w;
+    w.begin();
+    w.write("topic_names", topic_names);
+    w.end();
+    return w.getString();
+}
+
+// ===========================================================================
 // ExternalDBIDtoHostname
 // ===========================================================================
 

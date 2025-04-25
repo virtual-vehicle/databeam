@@ -19,7 +19,7 @@ class PIDControllerConfig(BaseConfig):
         cfg.number('output_min', 0.0)
         cfg.boolean('inverted', False)
         cfg.number('setpoint', 0.0)
-        cfg.string('input_module', 'REDLAB_TEMP_1')
+        cfg.string('input_module', 'REDLAB_TEMP_1/temperatures').label("Input Module/Topic")
         cfg.string('input_channel', 'CH_0')
         cfg.string('input_sub_mode', 'liveall').select(['liveall', 'livedec'])
         cfg.number('input_valid_min', 0.0)

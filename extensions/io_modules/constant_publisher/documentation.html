@@ -3,14 +3,16 @@
     The module can be used to publish configurable constant values to other modules.<br>
     A use case would be to set up values to be used with the math module.<br><br>
 
-    Other uses may include simulation of other modules for debugging purposes, etc.
+    Other uses may include simulation of other modules for debugging purposes, etc.<br><br>
+
+    Each value is preceeded by a "key" to name the channel. Separators between key and value may be '#' or '='.
 </p>
 
 <h2>Configuration</h2>
 <ul>
-  <li><b>Strings [str]:</b> a list of strings to be published</li>
-  <li><b>Floats [double]:</b> a list of floats to be published</li>
-  <li><b>Integers [int]:</b> a list of integers to be published</li>
+  <li><b>Strings [str]:</b> a list of keys + strings to be published</li>
+  <li><b>Floats [double]:</b> a list of keys + floats to be published</li>
+  <li><b>Integers [int]:</b> a list of keys + integers to be published</li>
   <li><b>Sleep Seconds [s]:</b> decimal number of seconds to sleep between sends</li>
 </ul>
 

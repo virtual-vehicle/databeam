@@ -14,10 +14,11 @@ import pynmeagps
 
 from vif.data_interface.module_interface import main
 from vif.data_interface.io_module import IOModule
+from vif.data_interface.network_messages import Status
 
 from io_modules.nmea_gnss.config import NMEAReaderConfig
+from io_modules.nmea_gnss.ntrip_client import NTRIPClient
 
-from vif.data_interface.network_messages import Status
 
 
 @environ.config(prefix='')
@@ -38,19 +39,34 @@ class NMEAReader(IOModule):
         self._worker_thread: Optional[threading.Thread] = None
         self._thread_stop_event = threading.Event()
 
+        self._ntrip_client: Optional[NTRIPClient] = None
+        self._ntrip_com_channel_lock = threading.Lock()
+        self._ntrip_com_channel = None
+
     def stop(self):
         self._stop_thread()
         self.logger.info('module closed')
 
+    def _ntrip_cb_serial(self, data: bytes):
+        with self._ntrip_com_channel_lock:
+            if self._ntrip_com_channel:
+                self._ntrip_com_channel.write(data)
+
+    def _ntrip_cb_tcp(self, data: bytes):
+        with self._ntrip_com_channel_lock:
+            if self._ntrip_com_channel:
+                self._ntrip_com_channel.sendall(data)
+
     def _worker_thread_fn(self):
         self.logger.debug('worker thread running')
+        self.module_interface.set_ready_state(False)
 
         def _connect_tcp():
             _stream = None
             while not self._thread_stop_event.is_set():
                 try:
                     _stream = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    _stream.settimeout(3)
+                    _stream.settimeout(1)
                     # _stream.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                     _stream.connect((self.config_handler.config['hostname'], self.config_handler.config['tcp_port']))
                     self.logger.info('TCP/IP connected')
@@ -64,13 +80,29 @@ class NMEAReader(IOModule):
                     continue
             return _stream
 
+        def _connect_serial():
+            _stream = None
+            while not self._thread_stop_event.is_set():
+                try:
+                    _stream = serial.Serial(self.config_handler.config['serial_port'],
+                                            self.config_handler.config['serial_baudrate'], timeout=1)
+                    self.logger.info('serial connected')
+                    break
+                except Exception as _e:
+                    self.logger.error(f'EX connect serial {type(_e).__name__}: {_e}')
+                    self._thread_stop_event.wait(1)
+            return _stream
+
         stream: Optional[Union[socket.socket, serial.Serial]] = None
 
         if self.config_handler.config['input_mode'] == 'serial':
-            stream = serial.Serial(self.config_handler.config['serial_port'],
-                                   self.config_handler.config['serial_baudrate'], timeout=1)
+            stream = _connect_serial()
+            with self._ntrip_com_channel_lock:
+                self._ntrip_com_channel = stream
         elif self.config_handler.config['input_mode'] == 'TCP/IP':
             stream = _connect_tcp()
+            with self._ntrip_com_channel_lock:
+                self._ntrip_com_channel = _connect_tcp()
         else:
             self.logger.error('worker: invalid config')
             return
@@ -87,14 +119,21 @@ class NMEAReader(IOModule):
         #     'S': 'simulated',
         #     'V': 'invalid'
         # }
+        self.module_interface.set_ready_state(True)
+        send_gga_interval_s = self.config_handler.config['ntrip_vrs_gga_sending_interval_s']
 
-        try:
-            while not self._thread_stop_event.is_set():
-                (raw_data, parsed_data) = nmr.read()
+        while not self._thread_stop_event.is_set():
+            try:
+                try:
+                    (raw_data, parsed_data) = nmr.read()
+                except serial.SerialException:
+                    parsed_data = None
+
                 time_rx = time.time_ns()
 
                 # handle errors and reconnect
                 if parsed_data is None:
+                    self.module_interface.set_ready_state(False)
                     # timeout
                     if self.config_handler.config['input_mode'] == 'TCP/IP':
                         try:
@@ -104,8 +143,24 @@ class NMEAReader(IOModule):
                         except Exception as e:
                             self.logger.error(f'EX worker {type(e).__name__}: {e}')
                             stream = _connect_tcp()
-                            nmr = pynmeagps.NMEAReader(stream)
-                    # TODO handle serial reconnect
+                            with self._ntrip_com_channel_lock:
+                                self._ntrip_com_channel = _connect_tcp()
+                    elif self.config_handler.config['input_mode'] == 'serial':
+                        try:
+                            _dummy = stream.read(2)
+                            if len(_dummy) == 0:
+                                continue
+                        except Exception as e:
+                            self.logger.error(f'EX worker {type(e).__name__}: {e}')
+                            stream = _connect_serial()
+                            with self._ntrip_com_channel_lock:
+                                self._ntrip_com_channel = stream
+                    else:
+                        self.logger.error('worker: invalid config')
+                        return
+
+                    nmr = pynmeagps.NMEAReader(stream)
+                    self.module_interface.set_ready_state(True)
                     continue
 
                 # self.logger.debug('%s', parsed_data)
@@ -144,22 +199,36 @@ class NMEAReader(IOModule):
                         if 'speed' in data:
                             data.pop('speed')
                 elif parsed_data.msgID == 'GGA':
-                    data['lat'] = parsed_data.lat
-                    data['lon'] = parsed_data.lon
-                    data['alt'] = parsed_data.alt
-                    data['numSV'] = parsed_data.numSV
-                    data['quality'] = parsed_data.quality
+                    data['lat'] = parsed_data.lat if isinstance(parsed_data.lat, (int, float)) else None
+                    data['lon'] = parsed_data.lon if isinstance(parsed_data.lon, (int, float)) else None
+                    data['alt'] = parsed_data.alt if isinstance(parsed_data.alt, (int, float)) else None
+                    data['numSV'] = parsed_data.numSV if isinstance(parsed_data.numSV, (int, float)) else None
+                    data['quality'] = parsed_data.quality if isinstance(parsed_data.quality, (int, float)) else None
                     self.data_broker.data_in(time_rx, data, schema_index=0)
 
                     # second topic for GeoJSON (no live data)
-                    if 'lat' in data and 'lon' in data:
+                    if 'lat' in data and 'lon' in data and all([data['lat'], data['lon']]):
                         self.data_broker.data_in(time_rx, {'geojson': json.dumps(
                             {'type': 'Point', 'coordinates': [data['lon'], data['lat']]}
                         )}, schema_index=1, mcap=True, live=False, latest=False)
 
-        except Exception as e:
-            self.logger.error(f'Exception in worker: {type(e).__name__}: {e}\n{traceback.format_exc()}')
+                    if self._ntrip_client and send_gga_interval_s >= 0:
+                        data_ntrip = data.copy()
+                        data_ntrip['sep'] = parsed_data.sep
+                        data_ntrip['sip'] = parsed_data.numSV
+                        data_ntrip['fix'] = pynmeagps.FIXTYPE_GGA[parsed_data.quality]
+                        data_ntrip['hdop'] = parsed_data.HDOP
+                        data_ntrip['diffage'] = parsed_data.diffAge
+                        data_ntrip['diffstation'] = parsed_data.diffStation
+                        self._ntrip_client.update_gga_info(data_ntrip)
 
+            except Exception as e:
+                self.logger.error(f'Exception in worker: {type(e).__name__}: {e}\n{traceback.format_exc()}')
+
+        with self._ntrip_com_channel_lock:
+            if isinstance(self._ntrip_com_channel, socket.socket):
+                self._ntrip_com_channel.close()
+            self._ntrip_com_channel = None
         if stream is not None:
             self.logger.debug('closing port')
             stream.close()
@@ -177,6 +246,9 @@ class NMEAReader(IOModule):
             self._thread_stop_event.clear()
             self._worker_thread.start()
 
+        if self._ntrip_client:
+            self._ntrip_client.start_receive()
+
         if locking:
             self._thread_handling_lock.release()
 
@@ -188,6 +260,9 @@ class NMEAReader(IOModule):
             self._thread_stop_event.set()
             self._worker_thread.join()
             self._worker_thread = None
+
+        if self._ntrip_client:
+            self._ntrip_client.stop_receive()
 
         if locking:
             self._thread_handling_lock.release()
@@ -220,9 +295,27 @@ class NMEAReader(IOModule):
             with self._thread_handling_lock:
                 self._stop_thread(locking=False)
 
+                with self._ntrip_com_channel_lock:
+                    self._ntrip_com_channel = None
+                if config['ntrip_client']:
+                    self._ntrip_client = NTRIPClient(server=config['ntrip_server'],
+                                                     port=config['ntrip_port'],
+                                                     mountpoint=config['ntrip_mountpoint'],
+                                                     user=config['ntrip_user'],
+                                                     password=config['ntrip_password'],
+                                                     send_gga_interval_s=config['ntrip_vrs_gga_sending_interval_s'],
+                                                     timeout_s=config['ntrip_timeout'])
+                    if self.config_handler.config['input_mode'] == 'TCP/IP':
+                        self._ntrip_client.add_msg_callback(self._ntrip_cb_tcp)
+                    elif self.config_handler.config['input_mode'] == 'serial':
+                        self._ntrip_client.add_msg_callback(self._ntrip_cb_serial)
+                else:
+                    if self._ntrip_client:
+                        self._ntrip_client.stop_receive()
+                    self._ntrip_client = None
+
                 if self.module_interface.sampling_active() or self.module_interface.capturing_active():
                     self._start_thread(locking=False)
-
             return Status(error=False)
 
         except Exception as e:

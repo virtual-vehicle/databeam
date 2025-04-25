@@ -56,9 +56,7 @@ ModuleInterface::ModuleInterface(IOModule* io_module, EnvConfig* env_config, Log
   data_config.init(module_data_config_file);
 
   //init data broker
-  std::string all_topic = env_config->get("DB_ID") + "/m/" + module_name + "/liveall";
-  std::string fixed_topic = env_config->get("DB_ID") + "/m/" + module_name + "/livedec";
-  data_broker.init(this->connection_manager, &data_config, logger, all_topic, fixed_topic);
+  data_broker.init(this->connection_manager, &data_config, logger, env_config->get("DB_ID"), module_name);
 
   //wait for controller
   wait_for_controller();
@@ -97,9 +95,12 @@ ModuleInterface::ModuleInterface(IOModule* io_module, EnvConfig* env_config, Log
   connection_manager->declare_queryable("get_latest", this);
   connection_manager->declare_queryable("ping", this);
   connection_manager->declare_queryable("get_metadata", this);
+  connection_manager->declare_queryable("get_schemas", this);
+  connection_manager->declare_queryable("stop_sampling", this);
+  connection_manager->declare_queryable("stop_capture", this);
   connection_manager->subscribe(env_config->get("DB_ID") + "/m/" + module_name + "/event_in", this);
-  connection_manager->subscribe(env_config->get("DB_ID") + "/c/bc/capture", this);
-  connection_manager->subscribe(env_config->get("DB_ID") + "/c/bc/sampling", this);
+  connection_manager->subscribe(env_config->get("DB_ID") + "/c/bc/start_capture", this);
+  connection_manager->subscribe(env_config->get("DB_ID") + "/c/bc/start_sampling", this);
   //connection_manager->subscribe("wavei/m/Ping/livedec", this);
   logger->debug("Successfully declared queryables and subcriptions.");
 }
@@ -185,6 +186,10 @@ void ModuleInterface::prepare_module()
   //set config
   Json json(module_cfg_str);
   if(this->io_module->setConfig(json) != "") logger->error("Error on initial setConfig");
+
+  //set schemas for data broker
+  std::vector<McapSchema> mcap_schemas = this->io_module->getMcapSchemas();
+  data_broker.setSchemas(mcap_schemas);
 }
 
 void ModuleInterface::wait_for_controller()
@@ -286,7 +291,7 @@ void ModuleInterface::notify_subscriber(std::string key, std::string payload)
   std::vector<std::string> tokens;
   Utils::split(key, tokens, '/');
 
-  if(tokens.size() >= 4 && tokens[3] == "capture")
+  if(tokens.size() >= 4 && tokens[3] == "start_capture")
   {
     //parse message
     StartStop start_stop;
@@ -311,34 +316,12 @@ void ModuleInterface::notify_subscriber(std::string key, std::string payload)
         logger->debug("[Capture/Start] Capture already running.");
       }
     }
-    else if(start_stop.cmd == StartStopCmd::STOP)
-    {
-      if(data_broker.getCaptureRunning())
-      {
-        data_broker.stopCapture();
-        logger->debug("[Capture/Stop] Capture stopped.");
-
-        if(!sampling_before_capture && data_broker.getSamplingRunning())
-        {
-          data_broker.stopSampling();
-          io_module->prepareStopSampling();
-          io_module->stopSampling();
-          logger->debug("[Sampling/Stop] Sampling stopped.");
-        }
-
-        sampling_before_capture = false;
-      }
-      else
-      {
-        logger->debug("[Capture/Stop] Capture not running.");
-      }
-    }
     else
     {
       logger->error("Received capture startstop command UNSPECIFIED.");
     }
   }
-  else if(tokens.size() >= 4 && tokens[3] == "sampling")
+  else if(tokens.size() >= 4 && tokens[3] == "start_sampling")
   {
     //parse message
     StartStop start_stop;
@@ -355,20 +338,6 @@ void ModuleInterface::notify_subscriber(std::string key, std::string payload)
       else
       {
         logger->debug("[Sampling/Start] Sampling already running.");
-      }
-    }
-    else if(start_stop.cmd == StartStopCmd::STOP)
-    {
-      if(data_broker.getSamplingRunning())
-      {
-        data_broker.stopSampling();
-        io_module->prepareStopSampling();
-        io_module->stopSampling();
-        logger->debug("[Sampling/Stop] Sampling stopped.");
-      }
-      else
-      {
-        logger->debug("[Sampling/Stop] Sampling not running.");
       }
     }
     else
@@ -390,6 +359,82 @@ std::string ModuleInterface::notify_queryable(std::string topic, std::string pay
   {
     std::string reply("pong");
     return reply;
+  }
+  else if(topic == "stop_sampling")
+  {
+    //parse message
+    StartStop start_stop;
+    start_stop.deserialize(payload);
+    bool error = false;
+
+    if(start_stop.cmd == StartStopCmd::STOP)
+    {
+      if(data_broker.getSamplingRunning())
+      {
+        data_broker.stopSampling();
+        io_module->prepareStopSampling();
+        io_module->stopSampling();
+        logger->debug("[Sampling/Stop] Sampling stopped.");
+      }
+      else
+      {
+        logger->debug("[Sampling/Stop] Sampling not running.");
+        error = true;
+      }
+    }
+    else
+    {
+      logger->error("Received sampling startstop command UNSPECIFIED.");
+      error = true;
+    }
+
+    //reply with StartStopReply / status
+    Status status(error);
+    StartStopReply reply(status);
+    std::string reply_str = reply.serialize();
+    return reply_str;
+  }
+  else if(topic == "stop_capture")
+  {
+    //parse message
+    StartStop start_stop;
+    start_stop.deserialize(payload);
+    bool error = false;
+
+    if(start_stop.cmd == StartStopCmd::STOP)
+    {
+      if(data_broker.getCaptureRunning())
+      {
+        data_broker.stopCapture();
+        logger->debug("[Capture/Stop] Capture stopped.");
+
+        if(!sampling_before_capture && data_broker.getSamplingRunning())
+        {
+          data_broker.stopSampling();
+          io_module->prepareStopSampling();
+          io_module->stopSampling();
+          logger->debug("[Sampling/Stop] Sampling stopped.");
+        }
+
+        sampling_before_capture = false;
+      }
+      else
+      {
+        logger->debug("[Capture/Stop] Capture not running.");
+        error = true;
+      }
+    }
+    else
+    {
+      logger->error("Received capture startstop command UNSPECIFIED.");
+      error = true;
+    }
+
+    //reply with StartStopReply / status
+    Status status(error);
+    StartStopReply reply(status);
+    std::string reply_str = reply.serialize();
+    return reply_str;
   }
   else if(topic == "data_config")
   {
@@ -541,6 +586,23 @@ std::string ModuleInterface::notify_queryable(std::string topic, std::string pay
     //reply with latest json data
     std::string latest_json_str = data_broker.getLatestData();
     return latest_json_str;
+  }
+  else if(topic == "get_schemas")
+  {
+    //get mcap schemas
+    std::vector<McapSchema> mcap_schemas = io_module->getMcapSchemas();
+    std::vector<std::string> topic_names;
+
+    //create list of topic names
+    for(unsigned int i = 0; i < mcap_schemas.size(); i++)
+    {
+      topic_names.push_back(mcap_schemas[i].get_topic());
+    }
+
+    //create and return reply
+    GetSchemasReply get_schemas_reply(topic_names); 
+    std::string reply_str = get_schemas_reply.serialize();
+    return reply_str;
   }
   else if(topic == "get_docu")
   {

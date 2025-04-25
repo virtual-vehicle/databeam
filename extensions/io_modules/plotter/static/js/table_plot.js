@@ -13,7 +13,7 @@ class TablePlot extends Plot
     this.plot_div.appendChild(this.table)
   }
 
-  plot(keys, values)
+  plot(keys, values, module_changed)
   {
     //get table as local variable
     let table = this.table

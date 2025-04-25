@@ -1,6 +1,7 @@
 import threading
 import traceback
 from typing import Optional
+import queue
 
 
 from vif.data_interface.connection_manager import ConnectionManager, Key
@@ -36,3 +37,19 @@ def get_measurement_state(logger, cm: ConnectionManager, db_id: str) -> Optional
     except Exception as e:
         logger.error(f'get_measurement_state ({type(e).__name__}): {e}\n{traceback.format_exc()}')
     return None
+
+
+def empty_queue(q):
+    while not q.empty():
+        try:
+            q.get_nowait()
+        except queue.Empty:
+            pass
+
+
+def check_leftover_threads() -> str:
+    num_threads_left = threading.active_count() - 1
+    ret_str = f'done - threads left: {num_threads_left}'
+    if num_threads_left > 0:
+        ret_str += f'\nthreads left: {[thread.name for thread in threading.enumerate()]}'
+    return ret_str

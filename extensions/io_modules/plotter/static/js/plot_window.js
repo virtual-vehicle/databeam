@@ -364,7 +364,7 @@ class PlotWindow
       values.push(data_list[i][1])
     }
 
-    this.current_plot.plot(keys, values)
+    this.current_plot.plot(keys, values, init_all)
   }
 
   set_modules(modules)

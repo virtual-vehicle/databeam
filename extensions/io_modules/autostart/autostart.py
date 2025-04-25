@@ -78,10 +78,25 @@ class AutoStart(IOModule):
             return
 
         while not self._thread_stop_event.is_set():
+            # optionally start sampling before capturing, so that a restart does not stop devices
+            if self.config_handler.config['sampling_before_capture_on_start']:
+                self.logger.info("Capture on start: sending start sampling command!")
+                message = StartStop(cmd=StartStopCmd.START)
+                reply = self.module_interface.cm.request(Key(self.module_interface.db_id, 'c', 'cmd_sampling'),
+                                                         data=message.serialize(), timeout=5)
+                # make sure there is a reply
+                if reply is None:
+                    self.logger.error("Capture on start: No start-sampling-reply received, trying again in 1 second.")
+                    self._thread_stop_event.wait(1)
+                    continue
+                # wait a little before starting capture
+                self._thread_stop_event.wait(1)
+
             # send start capture message
+            self.logger.info("Capture on start: sending start capture command!")
             message = StartStop(cmd=StartStopCmd.START)
             reply = self.module_interface.cm.request(Key(self.module_interface.db_id, 'c', 'cmd_capture'),
-                                                     data=message.serialize())
+                                                     data=message.serialize(), timeout=5)
 
             # make sure there is a reply
             if reply is None:
@@ -117,28 +132,15 @@ class AutoStart(IOModule):
                     continue
 
                 if self.module_interface.capturing_active():
-                    message = StartStop(cmd=StartStopCmd.STOP)
+                    self.logger.info("Restarting capture: sending restart capture command!")
+                    message = StartStop(cmd=StartStopCmd.RESTART)
                     reply = self.module_interface.cm.request(Key(self.module_interface.db_id, 'c', 'cmd_capture'),
-                                                             data=message.serialize())
-                    stop_reply = StartStopReply.deserialize(reply)
+                                                             data=message.serialize(), timeout=7)
+                    restart_reply = StartStopReply.deserialize(reply)
 
-                    if stop_reply.status.error:
-                        self.logger.error("Capture stop returned with error.")
-                        self.module_interface.log_gui("Capture stop returned with error.")
-                        continue
-
-                    # wait a sec
-                    self._thread_stop_event.wait(1)
-
-                    # start capture
-                    message = StartStop(cmd=StartStopCmd.START)
-                    reply = self.module_interface.cm.request(Key(self.module_interface.db_id, 'c', 'cmd_capture'),
-                                                             data=message.serialize())
-                    start_reply = StartStopReply.deserialize(reply)
-
-                    if start_reply.status.error:
-                        self.logger.error("Capture start returned with error.")
-                        self.module_interface.log_gui("Capture start returned with error.")
+                    if restart_reply.status.error:
+                        self.logger.error("Capture restart returned with error.")
+                        self.module_interface.log_gui("Capture restart returned with error.")
                         continue
 
                 future = self._next_restart_time()

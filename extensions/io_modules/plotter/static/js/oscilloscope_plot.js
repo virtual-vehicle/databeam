@@ -163,7 +163,7 @@ class OscilloscopePlot extends Plot
   /*
    * Plots the data in different ways depending on if the ts_key field exists.
    */
-  plot(keys, values)
+  plot(keys, values, module_changed)
   {
     this.updateLines(keys, values)
 

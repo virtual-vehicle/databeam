@@ -25,35 +25,39 @@ sudo apt-get install -y python3 python3-pip python3-venv
 # adopt docker IP ranges for compatibility with host network
 print_headline "adopt docker daemon config .."
 sudo mkdir -p /etc/docker
-sudo python3 -c """
-import os, json, re, subprocess, shutil
 
-# get dns servers from host OS
-dns = []
-if shutil.which('nmcli') is not None:
-    output = subprocess.check_output(['nmcli', 'dev', 'show']).decode()
-    trigger = False
-    for line in output.split('\n'):
-        if 'ethernet' in line or 'wifi' in line:
-            trigger = True
-        if trigger and 'IP4.DNS' in line:
-            dns.append(re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', line).group())
-        if 'GENERAL.DEVICE' in line:
-            trigger = False
-    dns = list(set(dns))
-    dns.append('8.8.8.8')
+DOCKER_DAEMON_CONFIG=/etc/docker/daemon.json
+printf "\nDocker config update .. old config:\n"
+if [ -f $DOCKER_DAEMON_CONFIG ] ; then
+    cat $DOCKER_DAEMON_CONFIG
+    printf "\nbacking up Docker config.\n"
+    sudo cp $DOCKER_DAEMON_CONFIG ${DOCKER_DAEMON_CONFIG}_BAK$(date +"%Y%m%d%H%M%S")
+else
+    printf "\ncreating Docker config.\n"
+    sudo touch $DOCKER_DAEMON_CONFIG
+fi
 
-# read existing daemon.json
-data = {}
-if os.path.isfile('/etc/docker/daemon.json'):
-    data = json.load(open('/etc/docker/daemon.json', 'r'))
-# write new daemon.json
-data['builder'] = {'gc': {'defaultKeepStorage': '10GB', 'enabled': True}}
-data['default-address-pools'] = [{'base': '172.16.0.0/16', 'size': 24}]
-if len(dns) > 0:
-    data['dns'] = dns
-json.dump(data, open('/etc/docker/daemon.json', 'w'), indent=2)
-"""
+# fetch active DNS servers from host OS and add 8.8.8.8
+dns_server_array=$(nmcli dev show | grep 'IP4.DNS' | awk '{print $2}' | sort -u | paste -sd, - | sed 's/\([^,]*\)/"\1"/g')
+extra_dns=""
+if askNoYes "Docker daemon.json: add 8.8.8.8 DNS?" ; then
+    extra_dns='"8.8.8.8"'
+fi
+if [[ -n "$dns_server_array" && -n "$extra_dns" ]]; then
+    dns_server_array="$dns_server_array,$extra_dns"
+elif [[ -z "$dns_server_array" && -n "$extra_dns" ]]; then
+    dns_server_array="$extra_dns"
+fi
+# add new entries, remove duplicates
+jq '
+  .["default-address-pools"] += [{"base":"10.16.0.0/16","size":24}] |
+  .["default-address-pools"] |= (unique_by(.base, .size)) |
+  if ('"[$dns_server_array]"' | length) > 0 then .["dns"] += '"[$dns_server_array]"' else . end |
+  .["dns"] |= (unique) |
+  .features += {"containerd-snapshotter": true} |
+  .builder += {"gc": {"defaultKeepStorage": "10GB", "enabled": true}}
+' $DOCKER_DAEMON_CONFIG > /tmp/tmp.json && sudo mv /tmp/tmp.json $DOCKER_DAEMON_CONFIG
+
 cat /etc/docker/daemon.json
 echo ""
 

@@ -64,7 +64,7 @@ When you develop a new module, there are several files you need to create/modify
 
 A basic lifecycle of a module looks like this:
 <div align="center">
-  <img alt="IO-Module lifecycle" src="doc/io_module_lifecycle.svg">
+  <img alt="IO-Module lifecycle" src="io_module_lifecycle.svg">
 </div>
 
 #### Python specific:

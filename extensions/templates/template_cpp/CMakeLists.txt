@@ -49,6 +49,9 @@ set(SRC_FILES
     ${SOURCE}/McapSchema.cpp
     ${SOURCE}/ConfigFactory.cpp
     ${SOURCE}/ConnectionManager.cpp
+    ${SOURCE}/ConnectionManager.cpp
+    ${SOURCE}/ZMQConnectionManager.cpp
+    ${SOURCE}/MultiConnectionManager.cpp
 )
 add_executable(${PROJECT_NAME} ${SRC_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "main")

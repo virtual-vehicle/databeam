@@ -6,7 +6,7 @@ class Plot
 
   }
 
-  plot(keys, values)
+  plot(keys, values, module_changed)
   {
 
   }

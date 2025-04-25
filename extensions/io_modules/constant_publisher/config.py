@@ -10,9 +10,9 @@ class ConstantPublisherConfig(BaseConfig):
     @classmethod
     def _schema(cls) -> Mapping:
         cfg = ConfigFactory()
-        cfg.string_array('strings', ['Key1#My String']).resizeable()
-        cfg.string_array('floats', ['Key2#1.23']).resizeable()
-        cfg.string_array('integers', ['Key3#123']).resizeable()
+        cfg.string_array('strings', ['Key1=My String']).resizeable()
+        cfg.string_array('floats', ['Key2=1.23']).resizeable()
+        cfg.string_array('integers', ['Key3=123']).resizeable()
         cfg.number('sleep_seconds', 1)
 
         return cfg.get_config()

@@ -34,8 +34,7 @@ from vif.data_interface.network_messages import (Reply, MeasurementState, Module
                                                  ModuleRegistryReply, Module, SystemControlQuery, SystemControlReply,
                                                  Status, StartStop, StartStopReply, MetaDataQuery, MetaDataReply,
                                                  MeasurementStateType, StartStopCmd, ModuleRegistryQueryCmd,
-                                                 SystemControlQueryCmd, MetaDataQueryCmd, ExternalDataBeamQuery,
-                                                 ExternalDataBeamQueryReply)
+                                                 SystemControlQueryCmd, MetaDataQueryCmd, ExternalDataBeamQueryReply)
 
 from meta_handler import MetaHandler
 from job_server import JobServer
@@ -88,6 +87,7 @@ class Controller(LoggerMixin):
         except Exception as e:
             self.logger.error(f'opening hostname file failed ({type(e).__name__}): {e}')
 
+        self._state_lock: threading.Lock = threading.Lock()
         self._state: MeasurementState = MeasurementState(state=MeasurementStateType.IDLE)
         self._sampling_active: bool = False
 
@@ -109,12 +109,16 @@ class Controller(LoggerMixin):
         self._cm: ConnectionManager = ConnectionManager(router_hostname=cfg.DB_ROUTER,
                                                         db_id=self._db_id, node_name='c',
                                                         shutdown_event=shutdown_ev,
-                                                        max_parallel_req=5)  # diminishing returns for more than ~3
+                                                        max_parallel_req=5,  # diminishing returns for more than ~3
+                                                        # TODO how many? create dynamically with num. modules .. or s/t
+                                                        max_parallel_queryables=10)
         self._pub_topics: Dict[str, Key] = {
-            'capture': Key(self._db_id, 'c', 'bc/capture'),
-            'sampling': Key(self._db_id, 'c', 'bc/sampling')
+            'capture': Key(self._db_id, 'c', 'bc/start_capture'),
+            'sampling': Key(self._db_id, 'c', 'bc/start_sampling')
         }
 
+        # create module registry lock
+        self._register_lock: threading.Lock = threading.Lock()
         # module registry: name: module
         self._module_registry: Dict[str, Module] = {}
         self._module_ts: Dict[str, float] = {}
@@ -133,17 +137,15 @@ class Controller(LoggerMixin):
         self._state_job: StateJob = StateJob(self._cm, self._db_id)
         self._job_server.add(self._state_job)
 
-        # create module registry lock
-        self._register_lock: threading.Lock = threading.Lock()
-
         # create plot juggler writer
         self._plot_juggler_writer: PlotJugglerWriter = PlotJugglerWriter(self._data_dir)
 
-    def log_gui(self, message: str) -> None:
+    def log_gui(self, message: str, log_severity=logging.DEBUG) -> None:
         """
         Uses the JobServer to show a message on the WebGUI.
         """
-        self.logger.debug("log_gui: %s", message)
+        if log_severity > logging.NOTSET:
+            self.logger.log(log_severity, "log_gui: %s", message)
         time_ns = datetime.now(timezone.utc)
         time_str = time_ns.strftime("%H:%M:%S.%f")
         log_job = LogJob(self._cm, self._db_id)
@@ -167,18 +169,18 @@ class Controller(LoggerMixin):
             self._async_cmd_thread.start()
 
             # register all incoming queryables
-            for key, cb in [(Key(self._db_id, 'c', 'module_registry'), self._cb_module_registry),
-                            (Key(self._db_id, 'c', 'system_control'), self._cb_sys_control),
-                            (Key(self._db_id, 'c', 'cmd_sampling'), self._cb_cmd_sampling),
-                            (Key(self._db_id, 'c', 'cmd_capture'), self._cb_cmd_capture),
-                            (Key(self._db_id, 'c', 'get_state'), self._cb_get_state),
-                            (Key(self._db_id, 'c', 'metadata'), self._cb_metadata),
-                            (Key(self._db_id, 'c', 'databeam_registry'), self._cb_databeam_registry)
+            for key, cb in [(Key(self._db_id, 'c', 'module_registry'), self._cb_qry_module_registry),
+                            (Key(self._db_id, 'c', 'system_control'), self._cb_qry_sys_control),
+                            (Key(self._db_id, 'c', 'cmd_sampling'), self._cb_qry_cmd_sampling),
+                            (Key(self._db_id, 'c', 'cmd_capture'), self._cb_qry_cmd_capture),
+                            (Key(self._db_id, 'c', 'get_state'), self._cb_qry_get_state),
+                            (Key(self._db_id, 'c', 'metadata'), self._cb_qry_metadata),
+                            (Key(self._db_id, 'c', 'databeam_registry'), self._cb_qry_databeam_registry)
                             ]:
                 self._cm.declare_queryable(key, cb)
 
             self._shutdown_event.wait(0.5)
-            self._cm.declare_queryable(Key(self._db_id, 'c', 'ping'), self._cb_ping)
+            self._cm.declare_queryable(Key(self._db_id, 'c', 'ping'), self._cb_qry_ping)
 
             # open a dummy socket for docker to be able to perform a healthcheck
             self._healthcheck_socket = create_bind('tcp://*:1100', zmq, zmq.PUSH)
@@ -308,25 +310,25 @@ class Controller(LoggerMixin):
 
     def _async_module_start_cmd(self, module_name):
         logger = logging.getLogger('_async_module_start_cmd')
-        if self._state.state == MeasurementStateType.CAPTURING or self._state.state == MeasurementStateType.SAMPLING:
-            # prepare capture/sampling on module (wait for reply)
-            if self._state.state == MeasurementStateType.CAPTURING:
-                cmd_string = 'capture'
-                cmd_payload = self._state.measurement_info.serialize()
-            else:
-                cmd_string = 'sampling'
-                cmd_payload = StartStop(cmd=StartStopCmd.START).serialize()
-            logger.info(f'start {cmd_string} on newly added module')
-            try:
-                reply = self._cm.request(Key(self._db_id, f'm/{module_name}', f'prepare_{cmd_string}'), cmd_payload)
-                if reply is not None:
-                    # start capture/sampling on module (broadcast)
-                    self._cm.publish(self._pub_topics[cmd_string],
-                                     StartStop(cmd=StartStopCmd.START).serialize())
-            except StopIteration:
-                logger.error(f'start {cmd_string}: no response from module')
-            except Exception as e:
-                logger.error(f'start failed ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+        with self._state_lock:
+            if self._state.state == MeasurementStateType.CAPTURING or self._state.state == MeasurementStateType.SAMPLING:
+                # prepare capture/sampling on module (wait for reply)
+                if self._state.state == MeasurementStateType.CAPTURING:
+                    cmd_string = 'capture'
+                    cmd_payload = self._state.measurement_info.serialize()
+                else:
+                    cmd_string = 'sampling'
+                    cmd_payload = StartStop(cmd=StartStopCmd.START).serialize()
+                logger.info(f'start {cmd_string} on newly added module')
+                try:
+                    reply = self._cm.request(Key(self._db_id, f'm/{module_name}', f'prepare_{cmd_string}'), cmd_payload)
+                    if reply is not None:
+                        # start capture/sampling on module (broadcast)
+                        self._cm.publish(self._pub_topics[cmd_string], StartStop(cmd=StartStopCmd.START).serialize())
+                except StopIteration:
+                    logger.error(f'start {cmd_string}: no response from module')
+                except Exception as e:
+                    logger.error(f'start failed ({type(e).__name__}): {e}\n{traceback.format_exc()}')
 
     def _async_module_list_changed(self):
         event_job = EventJob(self._cm, self._db_id)
@@ -334,7 +336,7 @@ class Controller(LoggerMixin):
         self._job_server.add(event_job)
         self._job_server.update()
 
-    def _cb_module_registry(self, data: bytes) -> str | bytes:
+    def _cb_qry_module_registry(self, data: bytes) -> str | bytes:
         """
         Uses the ModuleRegistryQuery to perform following tasks upon query:
             - Register module
@@ -342,12 +344,12 @@ class Controller(LoggerMixin):
             - List all modules in registry
         """
         try:
-            logger = logging.getLogger('_cb_module_registry')
+            logger = logging.getLogger('_cb_qry_module_registry')
             message = ModuleRegistryQuery.deserialize(data)
 
             # do not print info for every module register "heartbeat"
             if message.cmd != ModuleRegistryQueryCmd.REGISTER:
-                logger.info('rx: %s', message.serialize())
+                logger.debug('rx: %s', message.serialize())
 
             with self._register_lock:
                 if message.cmd == ModuleRegistryQueryCmd.REGISTER:
@@ -401,11 +403,11 @@ class Controller(LoggerMixin):
                         status=Status(error=True, title='unknown command', message=message.cmd.name)).serialize()
 
         except Exception as e:
-            self.logger.error(f'_cb_module_registry ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+            self.logger.error(f'_cb_qry_module_registry ({type(e).__name__}): {e}\n{traceback.format_exc()}')
             return ModuleRegistryReply(
                 status=Status(error=True, title=type(e).__name__, message=str(e))).serialize()
 
-    def _cb_sys_control(self, data: bytes) -> str | bytes:
+    def _cb_qry_sys_control(self, data: bytes) -> str | bytes:
         """
         Uses the SystemControlQuery to perform following tasks upon query:
             - Restart docker
@@ -415,9 +417,9 @@ class Controller(LoggerMixin):
             - Sync time
         """
         try:
-            logger = logging.getLogger('_cb_sys_control')
+            logger = logging.getLogger('_cb_qry_sys_control')
             message = SystemControlQuery.deserialize(data)
-            logger.info('rx: %s', message.serialize())
+            logger.debug('rx: %s', message.serialize())
 
             if message.cmd in [SystemControlQueryCmd.SHUTDOWN,
                                SystemControlQueryCmd.REBOOT,
@@ -455,7 +457,7 @@ class Controller(LoggerMixin):
                 raise KeyError(f'Unknown SystemControlQuery.Command: {message.cmd.name}')
 
         except Exception as e:
-            self.logger.error(f'_cb_sys_control ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+            self.logger.error(f'_cb_qry_sys_control ({type(e).__name__}): {e}\n{traceback.format_exc()}')
             return SystemControlReply(status=Status(error=True, title=type(e).__name__, message=str(e))).serialize()
 
     @staticmethod
@@ -468,167 +470,50 @@ class Controller(LoggerMixin):
         # reply to q.selector since the queryable (key) is a wildcard
         return StartStopReply(status=_status).serialize()
 
-    def _cb_cmd_sampling(self, data: bytes) -> str | bytes:
+    def _cb_qry_cmd_sampling(self, data: bytes) -> str | bytes:
         """
         Uses the StartStop and MeasurementState message structs to perform following tasks upon calling:
             - Start a sampling/capturing
             - Stop a sampling/capturing
         """
-
         try:
-            logger = logging.getLogger('_cb_cmd_sampling')
+            logger = logging.getLogger('_cb_qry_cmd_sampling')
             message = StartStop.deserialize(data)
-            logger.info('rx: %s', message.serialize())
+            logger.debug('rx: %s', message.serialize())
 
-            if self._state.state not in [MeasurementStateType.IDLE, MeasurementStateType.SAMPLING]:
-                logger.warning(f'sampling command called in wrong state {str(self._state.state)}')
-                return self.error_ret_startstop(is_error=True, title='c/cmd_sampling',
-                                                msg=f'sampling command called in wrong state {str(self._state.state)}')
+            if message.cmd not in [StartStopCmd.START, StartStopCmd.STOP, StartStopCmd.RESTART]:
+                raise ValueError(f'Unknown command for _cb_qry_cmd_sampling: {message.cmd.name}')
 
-            if message.cmd == StartStopCmd.START:
-                # enable sampling on all modules
-                self._query_all_modules('prepare_sampling', StartStop(cmd=StartStopCmd.START).serialize(),
-                                        reply_cls=StartStopReply, show_gui_warning=True)
+            with self._state_lock:
+                if self._state.state not in [MeasurementStateType.IDLE, MeasurementStateType.SAMPLING]:
+                    logger.warning(f'sampling command called in wrong state {str(self._state.state)}')
+                    return self.error_ret_startstop(is_error=True, title='c/cmd_sampling',
+                                                    msg=f'sampling command called in wrong state {str(self._state.state)}')
 
-                # start sampling on all modules (broadcast)
-                self._cm.publish(self._pub_topics['sampling'], StartStop(cmd=StartStopCmd.START).serialize())
+                if message.cmd == StartStopCmd.STOP or message.cmd == StartStopCmd.RESTART:
+                    logger.info('sending STOP sampling to modules')
+                    self._query_all_modules('stop_sampling', StartStop(cmd=StartStopCmd.STOP).serialize(),
+                                            reply_cls=StartStopReply, show_gui_warning=True, timeout=5)
 
-                if self._state.state == MeasurementStateType.IDLE:
-                    self._state.state = MeasurementStateType.SAMPLING
-                self._sampling_active = True
+                    if self._state.state == MeasurementStateType.SAMPLING:
+                        self._state.state = MeasurementStateType.IDLE
+                    self._sampling_active = False
 
-            elif message.cmd == StartStopCmd.STOP:
-                # stop sampling on all modules
-                self._cm.publish(self._pub_topics['sampling'], StartStop(cmd=StartStopCmd.STOP).serialize())
+                if message.cmd == StartStopCmd.START or message.cmd == StartStopCmd.RESTART:
+                    logger.info('sending PREPARE sampling to modules')
+                    self._query_all_modules('prepare_sampling', StartStop(cmd=StartStopCmd.START).serialize(),
+                                            reply_cls=StartStopReply, show_gui_warning=True, timeout=2)
 
-                if self._state.state == MeasurementStateType.SAMPLING:
-                    self._state.state = MeasurementStateType.IDLE
-                self._sampling_active = False
+                    logger.info('publishing START sampling broadcast to modules')
+                    self._cm.publish(self._pub_topics['sampling'], StartStop(cmd=StartStopCmd.START).serialize())
 
-            else:
-                raise ValueError(f'Unknown command for _cb_cmd_sampling: {message.cmd.name}')
-
-            # update state job
-            self._state_job.set_sampling(self._sampling_active)
-            self._job_server.update()
-
-            # reply OK
-            return StartStopReply(status=Status(error=False)).serialize()
-        except Exception as e:
-            self.logger.error(f'_cb_cmd ({type(e).__name__}): {e}\n{traceback.format_exc()}')
-            return self.error_ret_startstop(is_error=True, title=type(e).__name__, msg=str(e))
-
-    def _cb_cmd_capture(self, data: bytes) -> str | bytes:
-        try:
-            logger = logging.getLogger('_cb_cmd_capture')
-            message = StartStop.deserialize(data)
-            logger.info('rx: %s', message.serialize())
-
-            if message.cmd == StartStopCmd.START:
-                # ignore command if we are already capturing
-                if self._state.state == MeasurementStateType.CAPTURING:
-                    logger.warning('capture start called during running measurement')
-                    return self.error_ret_startstop(is_error=True, title='c/cmd_capture',
-                                                    msg='capture start called during running measurement')
-
-                # create name for measurement
-                t_now = datetime.now(timezone.utc)
-                # save string with millisecond precision and filesystem friendly characters
-                t_string = t_now.isoformat(sep='_', timespec='milliseconds').replace(':', '-').split('+')[0]
-
-                # update and load meta-data
-                self.meta_handler.update_dynamic_meta({
-                    'start_time_utc': t_now.isoformat(),
-                    'stop_time_utc': '',
-                    'duration': ''
-                })
-                meta_data = self.meta_handler.get_combined_meta()
-
-                self._state.measurement_info.name = get_valid_filename(
-                    f"{t_string}_{meta_data['run_id']}_{meta_data['run_tag']}", allow_unicode=False)
-                self._state.measurement_info.run_id = int(meta_data['run_id'])
-                self._state.measurement_info.run_tag = meta_data['run_tag']
-                self._state.state = MeasurementStateType.CAPTURING
-
-                logger.info(f'capture start called for {self._state.measurement_info.name}')
-
-                # make sure directory structure exists
-                create_directory(Path(self._data_dir / self._state.measurement_info.name))
-
-                # write start meta-data
-                self.write_metadata_file(meta_data)
-
-                # prepare capture on all modules (wait for replies)
-                self._query_all_modules('prepare_capture', self._state.measurement_info.serialize(),
-                                        reply_cls=Status, show_gui_warning=True)
-
-                # start capture on all modules (broadcast)
-                self._cm.publish(self._pub_topics['capture'], StartStop(cmd=StartStopCmd.START).serialize())
-
-                # write updated run meta (run_id)
-                self.meta_handler.update_system_meta({'run_id': int(meta_data['run_id']) + 1})
+                    if self._state.state == MeasurementStateType.IDLE:
+                        self._state.state = MeasurementStateType.SAMPLING
+                    self._sampling_active = True
 
                 # update state job
-                self._state_job.set_capture(True)
-                self._state_job.set_sampling(True)
-                self._job_server.update()
-
-                # send event job to update files
-                event_job = EventJob(self._cm, self._db_id)
-                event_job.set_files_changed(True).set_meta_changed(True).set_done()
-                self._job_server.add(event_job)
-                self._job_server.update()
-
-            elif message.cmd == StartStopCmd.STOP:
-                if self._state.state != MeasurementStateType.CAPTURING:
-                    logger.warning('capture stop called without running measurement')
-                    return self.error_ret_startstop(is_error=True, title='c/cmd_capture',
-                                                    msg='capture stop called without running measurement')
-
-                t_now = datetime.now(timezone.utc)
-
-                # create plot juggler xml before modules write meta-data to avoid race-condition
-                try:
-                    self._plot_juggler_writer.create_plot_juggler_xml(self._state.measurement_info.name)
-                except Exception as e:
-                    logger.error(f'plot juggler xml creation failed: {type(e).__name__}: {e}\n{traceback.format_exc()}')
-
-                # notify all modules to stop capture
-                stop_msg = StartStop(cmd=StartStopCmd.STOP).serialize()
-                self._cm.publish(self._pub_topics['capture'], stop_msg)
-
-                # write stop meta-data
-                try:
-                    meta_data = self.meta_handler.get_dynamic_meta()
-                    self.meta_handler.update_dynamic_meta({
-                        'stop_time_utc': t_now.isoformat(),
-                        'duration': str(t_now - datetime.fromisoformat(meta_data['start_time_utc']))
-                    })
-                    meta_data = self.meta_handler.get_combined_meta()
-                    # use most recent meta-data except for run_id and run_tag (use values from start-time)
-                    meta_data.update({'run_id': self._state.measurement_info.run_id,
-                                      'run_tag': self._state.measurement_info.run_tag})
-                    self.write_metadata_file(meta_data)
-
-                except Exception as e:
-                    logger.error(f'meta-data update failed: {type(e).__name__}: {e}\n{traceback.format_exc()}')
-
-                # check if we want to keep sampling (sampling is on)
-                if self._sampling_active:
-                    self._state.state = MeasurementStateType.SAMPLING
-                else:
-                    self._state.state = MeasurementStateType.IDLE
-                    # modules should know on their own to switch to sampling state
-
-                # reset measurement info name
-                self._state.measurement_info.name = ""
-
-                # update state job
-                self._state_job.set_capture(False)
                 self._state_job.set_sampling(self._sampling_active)
                 self._job_server.update()
-            else:
-                raise ValueError(f'Unknown command for _cb_cmd_capture: {message.cmd.name}')
 
             # reply OK
             return StartStopReply(status=Status(error=False)).serialize()
@@ -636,25 +521,162 @@ class Controller(LoggerMixin):
             self.logger.error(f'_cb_cmd ({type(e).__name__}): {e}\n{traceback.format_exc()}')
             return self.error_ret_startstop(is_error=True, title=type(e).__name__, msg=str(e))
 
-    def _cb_get_state(self, data: bytes) -> str | bytes:
+    def _helper_start_capture(self, logger: logging.Logger) -> Optional[str | bytes]:
+        assert self._state_lock.locked(), 'should be locked by _cb_qry_cmd_capture()'
+
+        # ignore command if we are already capturing
+        if self._state.state == MeasurementStateType.CAPTURING:
+            logger.warning('capture start called during running measurement')
+            return self.error_ret_startstop(is_error=True, title='c/cmd_capture',
+                                            msg='capture start called during running measurement')
+
+        # create name for measurement
+        t_now = datetime.now(timezone.utc)
+        # save string with millisecond precision and filesystem-friendly characters
+        t_string = t_now.isoformat(sep='_', timespec='milliseconds').replace(':', '-').split('+')[0]
+
+        # update and load meta-data
+        self.meta_handler.update_dynamic_meta({
+            'start_time_utc': t_now.isoformat(),
+            'stop_time_utc': '',
+            'duration': ''
+        })
+        meta_data = self.meta_handler.get_combined_meta()
+
+        self._state.measurement_info.name = get_valid_filename(
+            f"{t_string}_{meta_data['run_id']}_{meta_data['run_tag']}", allow_unicode=False)
+        self._state.measurement_info.run_id = int(meta_data['run_id'])
+        self._state.measurement_info.run_tag = meta_data['run_tag']
+        self._state.state = MeasurementStateType.CAPTURING
+
+        logger.info(f'capture start called for {self._state.measurement_info.name}')
+
+        # make sure directory structure exists
+        create_directory(Path(self._data_dir / self._state.measurement_info.name))
+
+        # write start meta-data
+        self.write_metadata_file(meta_data)
+
+        # prepare capture on all modules (wait for replies)
+        logger.info('sending PREPARE capturing to modules')
+        self._query_all_modules('prepare_capture', self._state.measurement_info.serialize(),
+                                reply_cls=Status, show_gui_warning=True, timeout=2)
+
+        # start capture on all modules (broadcast)
+        logger.info('publishing START capturing to modules')
+        self._cm.publish(self._pub_topics['capture'], StartStop(cmd=StartStopCmd.START).serialize())
+
+        # write updated run meta (run_id)
+        self.meta_handler.update_system_meta({'run_id': int(meta_data['run_id']) + 1})
+
+        # update state job
+        self._state_job.set_capture(True)
+        self._state_job.set_sampling(True)
+        self._job_server.update()
+
+        # send event job to update files
+        event_job = EventJob(self._cm, self._db_id)
+        event_job.set_files_changed(True).set_meta_changed(True).set_done()
+        self._job_server.add(event_job)
+        self._job_server.update()
+        return None
+
+    def _helper_stop_capture(self, logger: logging.Logger) -> Optional[str | bytes]:
+        assert self._state_lock.locked(), 'should be locked by _cb_qry_cmd_capture()'
+
+        if self._state.state != MeasurementStateType.CAPTURING:
+            logger.warning('capture stop called without running measurement')
+            return self.error_ret_startstop(is_error=True, title='c/cmd_capture',
+                                            msg='capture stop called without running measurement')
+
+        t_now = datetime.now(timezone.utc)
+
+        # create plotjuggler XML before modules write meta-data to avoid race-condition
+        try:
+            self._plot_juggler_writer.create_plot_juggler_xml(self._state.measurement_info.name)
+        except Exception as e:
+            logger.error(f'plotjuggler xml creation failed: {type(e).__name__}: {e}\n{traceback.format_exc()}')
+
+        # notify all modules to stop capture
+        stop_msg = StartStop(cmd=StartStopCmd.STOP).serialize()
+
+        # stop capture on all modules (wait for replies)
+        logger.info('sending STOP capturing to modules')
+        self._query_all_modules('stop_capture', stop_msg, reply_cls=StartStopReply, show_gui_warning=True, timeout=5)
+
+        # write stop meta-data
+        try:
+            meta_data = self.meta_handler.get_dynamic_meta()
+            self.meta_handler.update_dynamic_meta({
+                'stop_time_utc': t_now.isoformat(),
+                'duration': str(t_now - datetime.fromisoformat(meta_data['start_time_utc']))
+            })
+            meta_data = self.meta_handler.get_combined_meta()
+            # use most recent meta-data except for run_id and run_tag (use values from start-time)
+            meta_data.update({'run_id': self._state.measurement_info.run_id,
+                              'run_tag': self._state.measurement_info.run_tag})
+            self.write_metadata_file(meta_data)
+
+        except Exception as e:
+            logger.error(f'meta-data update failed: {type(e).__name__}: {e}\n{traceback.format_exc()}')
+
+        # check if we want to keep sampling (sampling is on)
+        if self._sampling_active:
+            self._state.state = MeasurementStateType.SAMPLING
+        else:
+            self._state.state = MeasurementStateType.IDLE
+            # modules should know on their own to switch to sampling state
+
+        # reset measurement info name
+        self._state.measurement_info.name = ""
+
+        # update state job
+        self._state_job.set_capture(False)
+        self._state_job.set_sampling(self._sampling_active)
+        self._job_server.update()
+        return None
+
+    def _cb_qry_cmd_capture(self, data: bytes) -> str | bytes:
+        try:
+            logger = logging.getLogger('_cb_qry_cmd_capture')
+            message = StartStop.deserialize(data)
+            logger.debug('rx: %s', message.serialize())
+
+            if message.cmd not in [StartStopCmd.START, StartStopCmd.STOP, StartStopCmd.RESTART]:
+                raise ValueError(f'Unknown command for _cb_qry_cmd_capture: {message.cmd.name}')
+
+            with self._state_lock:
+                if message.cmd == StartStopCmd.STOP or message.cmd == StartStopCmd.RESTART:
+                    if (ret := self._helper_stop_capture(logger)) is not None:
+                        return ret
+
+                if message.cmd == StartStopCmd.START or message.cmd == StartStopCmd.RESTART:
+                    if (ret := self._helper_start_capture(logger)) is not None:
+                        return ret
+
+            # reply OK
+            return StartStopReply(status=Status(error=False)).serialize()
+        except Exception as e:
+            self.logger.error(f'_cb_cmd ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+            return self.error_ret_startstop(is_error=True, title=type(e).__name__, msg=str(e))
+
+    def _cb_qry_get_state(self, data: bytes) -> str | bytes:
         """
         Logs the current measurement state upon calling.
         """
         try:
-            logger = logging.getLogger('_cb_get_state')
-            logger.info('rx')
-            # c_state = MeasurementState()
-            # c_state.CopyFrom(self._state)
+            logger = logging.getLogger('_cb_qry_get_state')
+            logger.debug('rx')
             return self._state.serialize()
         except Exception as e:
-            self.logger.error(f'_cb_get_state ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+            self.logger.error(f'_cb_qry_get_state ({type(e).__name__}): {e}\n{traceback.format_exc()}')
             return MeasurementState(state=MeasurementStateType.UNSPECIFIED).serialize()
 
-    def _cb_ping(self, data: bytes) -> str | bytes:
+    def _cb_qry_ping(self, data: bytes) -> str | bytes:
         """
         Receives a ping from a module and returns a pong to acknowledge connectivity.
         """
-        logger = logging.getLogger('_cb_ping')
+        logger = logging.getLogger('_cb_qry_ping')
         try:
             module_name = data.decode('utf-8')
         except:
@@ -664,7 +686,7 @@ class Controller(LoggerMixin):
             if len(module_name) == 0 or (len(module_name) > 0 and module_name in self._module_registry.keys()):
                 return "pong".encode('utf-8')
         except Exception as e:
-            self.logger.error(f'_cb_ping ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+            self.logger.error(f'_cb_qry_ping ({type(e).__name__}): {e}\n{traceback.format_exc()}')
         logger.warning('rx <%s> but replied with error', module_name)
         return "error".encode('utf-8')
 
@@ -674,16 +696,16 @@ class Controller(LoggerMixin):
         self._job_server.add(event_job)
         self._job_server.update()
 
-    def _cb_metadata(self, data: bytes) -> str | bytes:
+    def _cb_qry_metadata(self, data: bytes) -> str | bytes:
         """
         Uses the MetaDataQuery to perform the following tasks when called:
             - Get the current system meta-data
             - Add or modify some entries in the system or user meta-data
         """
         try:
-            logger = logging.getLogger('_cb_metadata')
+            logger = logging.getLogger('_cb_qry_metadata')
             message = MetaDataQuery.deserialize(data)
-            logger.info('rx: %s', message.serialize())
+            logger.debug('rx: %s', message.serialize())
 
             if message.cmd == MetaDataQueryCmd.GET:
                 reply = MetaDataReply(status=Status(error=False),
@@ -710,48 +732,59 @@ class Controller(LoggerMixin):
                         status.error = True
                         status.title += 'User meta decode error'
 
-                # send meta changed event
+                # send meta-changed event
                 self._add_async_cmd(self._async_metadata_changed, 0.01)
 
                 return MetaDataReply(status=status).serialize()
 
-            raise ValueError(f'Unknown command for _cb_metadata: {message.cmd.name}')
+            raise ValueError(f'Unknown command for _cb_qry_metadata: {message.cmd.name}')
 
         except Exception as e:
-            self.logger.error(f'_cb_metadata ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+            self.logger.error(f'_cb_qry_metadata ({type(e).__name__}): {e}\n{traceback.format_exc()}')
             return MetaDataReply(status=Status(error=True, title=type(e).__name__, message=str(e))).serialize()
 
-    def _cb_databeam_registry(self, data: bytes) -> str | bytes:
-        logger = logging.getLogger('_cb_databeam_registry')
+    def _cb_qry_databeam_registry(self, data: bytes) -> str | bytes:
+        logger = logging.getLogger('_cb_qry_databeam_registry')
         try:
-            logger.info('rx: ExternalDataBeamQuery')
+            logger.debug('rx: ExternalDataBeamQuery')
             db_id_list = list(self._db_id_hostnames.keys())
             hostname_list = list(self._db_id_hostnames.values())
             reply = ExternalDataBeamQueryReply(db_id_list, hostname_list)
             return reply.serialize()
         except Exception as e:
-            logger.error(f'_cb_databeam_registry ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+            logger.error(f'_cb_qry_databeam_registry ({type(e).__name__}): {e}\n{traceback.format_exc()}')
         return b''
 
     def _query_all_modules(self, cmd: str, payload: bytes | str, reply_cls: type[Reply],
-                           show_gui_warning=False) -> Dict:
+                           show_gui_warning=False, timeout: int = 1) -> Tuple[Dict, List]:
         """
-        Sends a query with a specifies reply class to all modules.
+        Queries all registered modules with a given command and payload, collects their responses, and reports
+        non-responding modules. Provides an optional GUI warning for modules that fail to respond.
+
+        :param cmd: The command to be sent to each module.
+        :param payload: The data payload to send along with the command.
+        :param reply_cls: The class responsible for deserializing responses from the modules.
+        :param show_gui_warning: Indicates whether to show a GUI warning for modules that do not respond.
+        :param timeout: The timeout interval (in seconds) for a module's response. Defaults to 1s
+        :returns: A tuple containing:
+                - A dictionary mapping module names to their deserialized responses.
+                - A list of all registered module names.
         """
         logger = logging.getLogger('_query_all_modules')
         # save status in responses with module name as key
         responses = {}
+        all_modules = list(self._module_registry.keys())
 
-        if len(self._module_registry) == 0:
-            return responses
+        if len(all_modules) == 0:
+            return responses, all_modules
 
         # send queries to each module
-        logger.debug('cmd "%s" to %d modules', cmd, len(self._module_registry))
+        logger.debug('cmd "%s" to %d modules', cmd, len(all_modules))
         t_start = time.time()
-        with ThreadPoolExecutor(max_workers=len(self._module_registry)) as executor:
+        with ThreadPoolExecutor(max_workers=len(all_modules)) as executor:
             future_to_module = {
-                executor.submit(self._cm.request, Key(self._db_id, f'm/{m}', cmd), payload, 1):
-                    m for m in self._module_registry.keys()
+                executor.submit(self._cm.request, Key(self._db_id, f'm/{m}', cmd), payload, timeout):
+                    m for m in all_modules
             }
             for future in as_completed(future_to_module):
                 try:
@@ -764,12 +797,12 @@ class Controller(LoggerMixin):
 
         logger.debug('cmd "%s" took %.3fs - responses: %s', cmd, (time.time() - t_start), str(responses))
         # check if all registered modules answered
-        for m in self._module_registry.keys():
+        for m in all_modules:
             if m not in responses.keys():
                 if show_gui_warning:
-                    pass  # TODO GUI warning
+                    self.log_gui(f'cmd "{cmd}": module "{m}" did not respond', logging.NOTSET)
                 logger.warning(f'cmd "{cmd}": module "{m}" did not respond')
-        return responses
+        return responses, all_modules
 
     def write_metadata_file(self, meta_data: Dict):
         """

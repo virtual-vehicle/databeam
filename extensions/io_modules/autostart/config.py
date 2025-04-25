@@ -11,6 +11,7 @@ class AutoStartConfig(BaseConfig):
     @classmethod
     def _schema(cls) -> Mapping:
         cfg = ConfigFactory()
+        cfg.boolean('sampling_before_capture_on_start', False)
         cfg.boolean('capture_on_start_enabled', False)
         cfg.number('capture_on_start_delay_s', 5)
         cfg.boolean('capture_restart_enabled', False)

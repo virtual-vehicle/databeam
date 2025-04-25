@@ -80,6 +80,22 @@ class MetaDataReply:
         return cls(Status.from_dict(data['status']), data['system_meta_json'], data['user_meta_json'])
 
 
+class GetSchemasReply:
+    def __init__(self, topic_names: dict):
+        self.topic_names = topic_names
+
+    def get_topic_names_list(self) -> List[str]:
+        return self.topic_names["topic_names"]
+
+    def serialize(self) -> str:
+        return json.dumps(self.topic_names)
+
+    @classmethod
+    def deserialize(cls, json_str: Union[str, bytes]) -> Self:
+        topic_data = json.loads(json_str)
+        return cls(topic_data)
+
+
 class Module:
     def __init__(self, name: str = "default_name", module_type: str = "default_type"):
         self.name = name
@@ -363,6 +379,7 @@ class StartStopCmd(IntEnum):
     UNSPECIFIED = 0
     START = 1
     STOP = 2
+    RESTART = 3
 
 
 class StartStop:

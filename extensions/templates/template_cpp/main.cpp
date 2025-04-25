@@ -21,6 +21,10 @@ int main(int argc, char **argv)
   env_config.add("DEPLOY_VERSION", "latest");
   env_config.add("DB_ID", "db_debug");
   env_config.add("DB_ROUTER", "localhost");
+  env_config.add("DB_ROUTER_FRONTEND_PORT", "5555");
+  env_config.add("DB_ROUTER_BACKEND_PORT", "5556");
+  env_config.add("DB_ROUTER_SUB_PORT", "5557");
+  env_config.add("DB_ROUTER_PUB_PORT", "5558");
 
   //create and init logger instance
   Logger logger;

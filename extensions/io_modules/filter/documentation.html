@@ -1,0 +1,33 @@
+<h2>Description</h2>
+<p>
+    A module receiving real time data from another module and performing a real time filtering technique on its selected channels.
+</p>
+
+<h2>Configuration</h2>
+<ul>
+  <li><b>Input Module:</b> The string of the livedata topic to receive from [module_name/topic_name/rate],
+                           where rate is either liveall, or livedec.</li>
+  <li><b>Channels:</b> A string list of all channels to filter and output of the subscribed module/topic.</li>
+  <li><b>Timebase:</b> The number of previous samples to account for in the filter. Can be set to samples (sample number) or time (seconds).</li>
+  <li><b>Timebase Value [samples/sec]:</b> The value representing the used filtering window. Can be sample number, time in seconds, or
+    some other parameter (e.g. remembering constant tau). All have the same effect, that a higher value leads to more smoothing, but also more lagging.</li>
+  <li><b>Method:</b> The type of filter to apply to the received data.</li>
+</ul>
+
+<h2>Method Formulas</h2>
+<ul>
+  <li><b>Average:</b> A simple moving average filter, which averages for every timestep all N previous datapoints (samples)
+    or all previous datapoints inside the last T seconds (time).</li>
+  <li><b>Exponential Average:</b> An exponentially decaying moving average. Utilizes a smooting factor alpha to combine every new
+    datapoint with the previous ones, as can be read here: <a href="https://en.wikipedia.org/wiki/Exponential_smoothing">Wikipedia Source</a></li>.
+    If timebase is set to time, the timebase value does not represent the window size anymore, but the a remembering constant tau.
+    This allows to account previous samples which arrive irregularly and weight them based on the time passed since the current datapoint.
+    Tau then represents the impact previous values still have on the current datapoint. Higher tau leads to more smoothing, but also more lagging.
+  <li><b>Median:</b> A simple moving median filter, which takes the median for every timestep of all N previous datapoints (samples)
+    or of all previous datapoints inside the last T seconds (time).</li>
+</ul>
+
+<h2>Known Issues</h2>
+<ul>
+  <li>None.</li>
+</ul>

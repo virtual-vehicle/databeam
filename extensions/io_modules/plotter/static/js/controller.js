@@ -46,6 +46,10 @@ class Controller
     {
       this.model.setModuleData(tokens[1], msg.data)
     }
+    else if(tokens.length == 3 && tokens[0] == "data")
+    {
+      this.model.setModuleData(tokens[1] + "/" + tokens[2], msg.data)
+    }
     else
     {
       console.error("WS received unknown message type: " + msg.type)

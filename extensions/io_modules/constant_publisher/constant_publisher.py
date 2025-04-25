@@ -85,6 +85,17 @@ class ConstantPublisher(IOModule):
             self._thread_handling_lock.release()
 
     def command_validate_config(self, config) -> Status:
+        for x in config['strings'] + config['floats'] + config['integers']:
+            if '#' in x and '=' in x:
+                self.logger.error(f"config rejected: multiple separators (#=): {x}")
+                return Status(error=True, title='Invalid config', message=f'invalid: {x}')
+            if not ('#' in x or '=' in x):
+                self.logger.error(f"config rejected: no separators (#=): {x}")
+                return Status(error=True, title='Invalid config', message=f'invalid: {x}')
+            if x.count('#') > 1 or x.count('=') > 1:
+                self.logger.error(f"config rejected: too many separators (#=): {x}")
+                return Status(error=True, title='Invalid config', message=f'invalid: {x}')
+
         if config['sleep_seconds'] < 0.001:
             self.logger.error(f"config rejected: sleep value too small: {config['sleep_seconds']}")
             return Status(error=True, title='Invalid config', message=f'sleep value too small: '
@@ -116,12 +127,12 @@ class ConstantPublisher(IOModule):
                         'integer': {},
                     }
                     for s in config['strings']:
-                        _add_value(new_constant_data['string'], *s.split('#'))
+                        _add_value(new_constant_data['string'], *s.split('#' if '#' in s else '='))
                     for f in config['floats']:
-                        key, value = f.split('#')
+                        key, value = f.split('#' if '#' in f else '=')
                         _add_value(new_constant_data['number'], key, float(value))
                     for i in config['integers']:
-                        key, value = i.split('#')
+                        key, value = i.split('#' if '#' in i else '=')
                         _add_value(new_constant_data['integer'], key, int(value))
                 except Exception as e:
                     self.logger.error(f"config rejected: {type(e).__name__}: {e}")

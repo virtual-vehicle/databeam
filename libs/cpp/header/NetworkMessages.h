@@ -242,6 +242,21 @@ public:
 };
 
 // ===========================================================================
+// GetSchemasReply
+// ===========================================================================
+
+class GetSchemasReply
+{
+public:
+    GetSchemasReply() = delete;
+    explicit GetSchemasReply(std::vector<std::string> topic_names);
+
+    std::string serialize();
+
+    std::vector<std::string> topic_names;
+};
+
+// ===========================================================================
 // ExternalDBIDtoHostname
 // ===========================================================================
 

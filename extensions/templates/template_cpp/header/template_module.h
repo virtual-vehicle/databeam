@@ -22,6 +22,7 @@ public:
     bool prepareStopSampling() override;
     bool stopSampling() override;
     bool getThreadKillFlag() { return worker_thread_kill; }
+    std::vector<McapSchema> getMcapSchemas() override;
 
     ModuleInterface* getDataInterface()
     {
@@ -37,7 +38,7 @@ private:
     bool worker_thread_kill = false;
 
     // default config json string
-    static std::string default_config;
+    std::string default_config;
 
     // the current json config
     Json config_json;

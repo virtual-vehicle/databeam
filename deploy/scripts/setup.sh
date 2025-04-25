@@ -29,9 +29,23 @@ printf "target username: $TARGET_USERNAME\n"
 printf "dockerhub user: $DOCKERHUB_USER\n"
 printf "dockerhub token: $DOCKERHUB_TOKEN\n"
 
-if ! grep -q ^NTP= "/etc/systemd/timesyncd.conf"; then
-    printf "\nconfigure NTP with server $DEPLOY_TIMESERVER\n"
-    echo 'NTP=${DEPLOY_TIMESERVER}' | sudo tee -a /etc/systemd/timesyncd.conf
+printf "\nconfigure systemd-timesyncd with NTP server $DEPLOY_TIMESERVER\n"
+
+# Check if NTP line exists and is uncommented
+NTP_CHANGED=0
+if grep -q "^NTP=" "/etc/systemd/timesyncd.conf"; then
+    # NTP line exists and is uncommented - append our server if not already present
+    if ! grep -qE "^NTP=.*(\s|^)$DEPLOY_TIMESERVER(\s|$)" "/etc/systemd/timesyncd.conf"; then
+        sudo sed -i "/^NTP=/ s/$/ $DEPLOY_TIMESERVER/" /etc/systemd/timesyncd.conf
+        NTP_CHANGED=1
+    fi
+else
+    echo "NTP=$DEPLOY_TIMESERVER" | sudo tee -a /etc/systemd/timesyncd.conf
+    NTP_CHANGED=1
+fi
+
+# Only reload and restart if we made changes
+if [ $NTP_CHANGED -eq 1 ]; then
     sudo systemctl daemon-reload
     sudo systemctl restart systemd-timesyncd.service || true   # rely on a reboot .. NTP daemon differs on every OS
     sleep 5
@@ -62,16 +76,21 @@ fi
 
 # adopt docker IP ranges for compatibility with host network
 DOCKER_DAEMON_CONFIG=/etc/docker/daemon.json
-if [ ! -f "$DOCKER_DAEMON_CONFIG" ] || [ -z $(grep "default-address-pools" "$DOCKER_DAEMON_CONFIG") ] ; then
-    printf "\nadding network ranges to docker config ..\n"
-    sudo tee -a $DOCKER_DAEMON_CONFIG <<- "EOF"
-{
-        "default-address-pools":[
-                {"base":"172.16.0.0/16","size":24}
-        ]
-}
-EOF
+printf "\nDocker config update .. old config:\n"
+if [ -f $DOCKER_DAEMON_CONFIG ] ; then
+    cat $DOCKER_DAEMON_CONFIG
+    printf "\nbacking up Docker config.\n"
+    sudo cp $DOCKER_DAEMON_CONFIG ${DOCKER_DAEMON_CONFIG}_BAK$(date +"%Y%m%d%H%M%S")
+else
+    printf "\ncreating Docker config.\n"
+    sudo touch $DOCKER_DAEMON_CONFIG
 fi
+
+jq '
+  .["default-address-pools"] += [{"base":"10.16.0.0/16","size":24}] |
+  .["default-address-pools"] |= (unique_by(.base, .size)) |
+  .features += {"containerd-snapshotter": true}
+' $DOCKER_DAEMON_CONFIG > /tmp/tmp.json && sudo mv /tmp/tmp.json $DOCKER_DAEMON_CONFIG
 
 # prepare NetworkManager to ignore docker networks
 if [ ! -f "/etc/NetworkManager/conf.d/ignore_docker.conf" ]; then

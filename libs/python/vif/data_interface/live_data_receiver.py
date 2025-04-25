@@ -5,6 +5,8 @@ from functools import partial
 from vif.logger.logger import LoggerMixin
 from vif.data_interface.connection_manager import ConnectionManager, Key
 
+from vif.data_interface.network_messages import GetSchemasReply
+
 
 class LiveDataReceiver(LoggerMixin):
     def __init__(self, *args, con_mgr: ConnectionManager, databeam_id: str, **kwargs):
@@ -16,6 +18,10 @@ class LiveDataReceiver(LoggerMixin):
         self._db_id = databeam_id
         self._data_callback: Optional[Callable[[str, str, Dict | str], None]] = None
         self._raw_json_string = False
+
+    def receive_module_schemas(self, module_name: str) -> List[str]:
+        module_schemas = self._cm.request(Key(self._db_id, f'm/{module_name}', "get_schemas"))
+        return GetSchemasReply.deserialize(module_schemas).get_topic_names_list()
 
     def receive_raw_json_string(self, enabled: bool):
         self._raw_json_string = enabled

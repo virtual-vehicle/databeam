@@ -33,7 +33,8 @@ from vif.data_interface.network_messages import (MeasurementState, ModuleRegistr
                                                  ModuleConfigQueryCmd, ModuleConfigReply, ModuleDataConfigQuery,
                                                  ModuleDataConfigCmd, ModuleDataConfigReply, DocumentationReply,
                                                  MeasurementInfo, ModuleConfigEvent, ModuleConfigEventReply,
-                                                 ExternalDataBeamQuery, ExternalDataBeamQueryReply)
+                                                 ExternalDataBeamQuery, ExternalDataBeamQueryReply,
+                                                 GetSchemasReply)
 
 
 @environ.config(prefix='')
@@ -142,7 +143,7 @@ class ModuleInterface(LoggerMixin):
         # set final config directory with assigned module name
         self.config_handler.set_config_dir(self.config_dir)
 
-        self.data_broker.start_processes()
+        self.data_broker.start_capture_process()
 
         # load data_config.json
         self.data_config_path = self.config_dir / 'data_config.json'
@@ -175,20 +176,26 @@ class ModuleInterface(LoggerMixin):
                             (Key(self.db_id, f'm/{self.name}', 'config_event'), self.__cb_config_event),
                             (Key(self.db_id, f'm/{self.name}', 'data_config'), self.__cb_data_config),
                             (Key(self.db_id, f'm/{self.name}', 'prepare_sampling'), self.__cb_prepare_sampling),
+                            (Key(self.db_id, f'm/{self.name}', 'stop_sampling'), self.__cb_stop_sampling),
                             (Key(self.db_id, f'm/{self.name}', 'get_docu'), self.__cb_get_docu),
                             (Key(self.db_id, f'm/{self.name}', 'prepare_capture'), self.__cb_prepare_capture),
+                            (Key(self.db_id, f'm/{self.name}', 'stop_capture'), self.__cb_stop_capture),
                             (Key(self.db_id, f'm/{self.name}', 'get_latest'), self.__cb_get_latest),
                             (Key(self.db_id, f'm/{self.name}', 'get_metadata'), self.__cb_get_metadata),
+                            (Key(self.db_id, f'm/{self.name}', 'get_schemas'), self.__cb_get_schemas)
                             ]:
             self.cm.declare_queryable(q_key, q_cb)
 
         # register publishers
         self.cm.declare_publisher(Key(self.db_id, f'm/{self.name}', 'event_out'))
 
+        # Start after queryables are declared because it needs get_schemas
+        self.data_broker.start_live_process()
+
         # register subscribers
         for sub_key, sub_cb in [(Key(self.db_id, f'm/{self.name}', 'event_in'), self.__cb_sub_event),
-                                (Key(self.db_id, 'c', 'bc/sampling'), self.__cb_sub_sampling),
-                                (Key(self.db_id, 'c', 'bc/capture'), self.__cb_sub_capture),
+                                (Key(self.db_id, 'c', 'bc/start_sampling'), self.__cb_sub_start_sampling),
+                                (Key(self.db_id, 'c', 'bc/start_capture'), self.__cb_sub_start_capture),
                                 ]:
             self.cm.subscribe(sub_key, sub_cb)
 
@@ -344,6 +351,7 @@ class ModuleInterface(LoggerMixin):
 
                 # apply config in module
                 status = self.module.command_apply_config()
+                self.data_broker.notify_possible_schema_change()
 
                 reply = ModuleConfigReply(status=status)
                 return reply.serialize()
@@ -357,9 +365,9 @@ class ModuleInterface(LoggerMixin):
                 return reply.serialize()
 
             else:
-                logger.error('unknown command: %s', str(message.cmd))
+                logger.error('unknown command: %s', message.cmd.name)
                 reply = ModuleConfigReply(status=Status(error=True, title='unknown command',
-                                                        message=str(message.cmd.name)))
+                                                        message=message.cmd.name))
                 return reply.serialize()
 
         except Exception as e:
@@ -382,9 +390,9 @@ class ModuleInterface(LoggerMixin):
                 self.__write_data_config()
                 return ModuleDataConfigReply(status=Status(error=False)).serialize()
             else:
-                logger.error('unknown command: %s', str(message.cmd))
+                logger.error('unknown command: %s', message.cmd.name)
                 return ModuleDataConfigReply(
-                    status=Status(error=True, title='unknown command', message=str(message.cmd))).serialize()
+                    status=Status(error=True, title='unknown command', message=message.cmd.name)).serialize()
 
         except Exception as e:
             self.__logger.error(f'__cb_data_config ({type(e).__name__}): {e}\n{traceback.format_exc()}')
@@ -405,7 +413,7 @@ class ModuleInterface(LoggerMixin):
                 else:
                     logger.warning('sampling already active')
             else:
-                raise ValueError(f'Unknown command: {str(message.cmd)}')
+                raise ValueError(f'Unknown command: {message.cmd.name}')
 
             # reply OK
             return StartStopReply(status=Status(error=False)).serialize()
@@ -413,7 +421,7 @@ class ModuleInterface(LoggerMixin):
             self.__logger.error(f'__cb_prepare_sampling ({type(e).__name__}): {e}\n{traceback.format_exc()}')
             return StartStopReply(status=Status(error=True, title=type(e).__name__, message=str(e))).serialize()
 
-    def __cb_sub_sampling(self, key: str, data: bytes) -> None:
+    def __cb_sub_start_sampling(self, key: str, data: bytes) -> None:
         try:
             logger = logging.getLogger('__cb_sub_sampling')
             message: StartStop = StartStop.deserialize(data)
@@ -430,32 +438,30 @@ class ModuleInterface(LoggerMixin):
                     self._sampling_active = True
                 else:
                     logger.info('no need to start sampling in state %s', str(self.state.state))
-            elif message.cmd == StartStopCmd.STOP:
+            else:
+                raise ValueError(f'Unknown command for {str(key)}: {message.cmd.name}')
+        except Exception as e:
+            self.__logger.error(f'__cb_sub_sampling ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+
+    def __cb_stop_sampling(self, data: bytes) -> str | bytes:
+        try:
+            logger = logging.getLogger('__cb_stop_sampling')
+            message: StartStop = StartStop.deserialize(data)
+            logger.debug('rx: %s', message.serialize())
+
+            if message.cmd == StartStopCmd.STOP:
                 logger.debug('stop sampling')
                 self.module.command_stop_sampling()
                 self.state.state = MeasurementStateType.IDLE
                 self._sampling_active = False
             else:
-                raise ValueError(f'Unknown command for {str(key)}: {str(message.cmd)}')
-        except Exception as e:
-            self.__logger.error(f'__cb_sub_sampling ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+                raise ValueError(f'Unknown command: {message.cmd.name}')
 
-    def __cb_get_docu(self, data: bytes) -> str | bytes:
-        message = DocumentationReply(html_text='')
-        try:
-            documentation_path = os.getcwd() + "/documentation.html"
-            # make sure documentation file exists
-            if not os.path.exists(documentation_path):
-                self.__logger.error("Documentation file not found")
-                message.html_text = "Documentation file not found."
-            else:
-                # read documentation file content into string
-                with open(documentation_path, 'r') as file:
-                    message.html_text = file.read()
+            # reply OK
+            return StartStopReply(status=Status(error=False)).serialize()
         except Exception as e:
-            self.__logger.error(f'_cb_get_docu ({type(e).__name__}): {e}\n{traceback.format_exc()}')
-
-        return message.serialize()
+            self.__logger.error(f'__cb_stop_sampling ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+            return StartStopReply(status=Status(error=True, title=type(e).__name__, message=str(e))).serialize()
 
     def __cb_prepare_capture(self, data: bytes) -> str | bytes:
         try:
@@ -503,30 +509,7 @@ class ModuleInterface(LoggerMixin):
             self.__logger.error(f'__cb_prepare_capture ({type(e).__name__}): {e}\n{traceback.format_exc()}')
             return Status(error=True, title=type(e).__name__, message=str(e)).serialize()
 
-    def __cb_get_latest(self, data: bytes) -> str | bytes:
-        try:
-            # logger = logging.getLogger('__cb_get_latest')
-            # logger.debug('rx %s', key)
-
-            time_ns, latest_data = self.data_broker.get_latest()
-            if latest_data is not None:
-                latest_data['ts'] = time_ns
-                return orjson.dumps(latest_data)
-            else:
-                return "{}".encode('utf-8')
-        except Exception as e:
-            self.__logger.error(f'__cb_get_latest ({type(e).__name__}): {e}\n{traceback.format_exc()}')
-            return "{}".encode('utf-8')
-
-    def __cb_get_metadata(self, data: bytes) -> str | bytes:
-        try:
-            metadata = self.module.get_meta_data()
-            return orjson.dumps(metadata)
-        except Exception as e:
-            self.__logger.error(f'__cb_get_metadata ({type(e).__name__}): {e}\n{traceback.format_exc()}')
-            return "{}".encode('utf-8')
-
-    def __cb_sub_capture(self, key: str, data: bytes) -> None:
+    def __cb_sub_start_capture(self, key: str, data: bytes) -> None:
         try:
             logger = logging.getLogger('__cb_sub_capture')
             message = StartStop.deserialize(data)
@@ -542,33 +525,21 @@ class ModuleInterface(LoggerMixin):
                         self.state.state = MeasurementStateType.CAPTURING
                 else:
                     logger.debug('capturing is disabled')
-
-            elif message.cmd == StartStopCmd.STOP:
-                self.module.command_stop_capturing()
-                if self._sampling_active:
-                    logger.debug('keep sampling active')
-                    self.state.state = MeasurementStateType.SAMPLING
-                else:
-                    logger.debug('stop sampling')
-                    self.module.command_stop_sampling()
-                    self.state.state = MeasurementStateType.IDLE
-                self.data_broker.stop_capturing()
-
             else:
-                raise ValueError(f'Unknown command for {key}: {str(message.cmd)}')
+                raise ValueError(f'Unknown command for {str(key)}: {message.cmd.name}')
 
             # write meta-data to .json file
             if self.state.measurement_info.name != '' and self.data_config.enable_capturing:
                 meta = self.module.get_meta_data()
                 config = self.config_handler.config
-                if "config" in meta:
-                    logger.error('Key "config" already stored in meta-data!')
-                else:
-                    meta.update({"config": json.dumps(config)})
-                if "type" in meta:
-                    logger.error('Key "type" already stored in meta-data!')
-                else:
-                    meta.update({"type": self.config_handler.type})
+                additional_meta_data = [("config", json.dumps(config)),
+                                        ("module_type", self.config_handler.type),
+                                        ("module_name", self.name)]
+                for key, value in additional_meta_data:
+                    if key in meta:
+                        logger.error(f'Key "{key}" already stored in meta-data! Value: {meta[key]}')
+                    else:
+                        meta.update({key: value})
 
                 try:
                     file_path: Path = self.data_dir / self.state.measurement_info.name / self.name / "module_meta.json"
@@ -578,13 +549,92 @@ class ModuleInterface(LoggerMixin):
                 except Exception as _e:
                     logger.error(f'write_metadata failed ({type(_e).__name__}): {_e}\n{traceback.format_exc()}')
 
-            # reset measurement name on stop
+            # reset the measurement name on stop
             if message.cmd == StartStopCmd.STOP:
                 self.state.measurement_info = MeasurementInfo()
                 #self.state.measurement_info.Clear()
 
         except Exception as e:
             self.__logger.error(f'__cb_sub_capture ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+
+    def __cb_stop_capture(self, data: bytes) -> str | bytes:
+        try:
+            logger = logging.getLogger('__cb_stop_capture')
+            message: StartStop = StartStop.deserialize(data)
+            logger.debug('rx: %s', message.serialize())
+
+            if message.cmd == StartStopCmd.STOP:
+                self.module.command_stop_capturing()
+                if self._sampling_active:
+                    logger.debug('keep sampling active')
+                    self.state.state = MeasurementStateType.SAMPLING
+                else:
+                    logger.debug('stop sampling')
+                    self.module.command_stop_sampling()
+                    self.state.state = MeasurementStateType.IDLE
+                self.data_broker.stop_capturing()
+            else:
+                raise ValueError(f'Unknown command: {message.cmd.name}')
+
+            return StartStopReply(status=Status(error=False)).serialize()
+
+        except Exception as e:
+            self.__logger.error(f'__cb_stop_capture ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+            return StartStopReply(status=Status(error=True, title=type(e).__name__, message=str(e))).serialize()
+
+    def __cb_get_latest(self, data: bytes) -> str | bytes:
+        try:
+            # logger = logging.getLogger('__cb_get_latest')
+            # logger.debug('rx %s', key)
+
+            time_ns, latest_data = self.data_broker.get_latest()
+            if latest_data is not None:
+                latest_data['ts'] = time_ns
+                return orjson.dumps(latest_data)
+            else:
+                return "{}".encode('utf-8')
+        except Exception as e:
+            self.__logger.error(f'__cb_get_latest ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+            return "{}".encode('utf-8')
+
+    def __cb_get_docu(self, data: bytes) -> str | bytes:
+        message = DocumentationReply(html_text='')
+        try:
+            documentation_path = os.getcwd() + "/documentation.html"
+            # make sure documentation file exists
+            if not os.path.exists(documentation_path):
+                self.__logger.error("Documentation file not found")
+                message.html_text = "Documentation file not found."
+            else:
+                # read documentation file content into string
+                with open(documentation_path, 'r') as file:
+                    message.html_text = file.read()
+        except Exception as e:
+            self.__logger.error(f'_cb_get_docu ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+
+        return message.serialize()
+
+    def __cb_get_metadata(self, data: bytes) -> str | bytes:
+        try:
+            metadata = self.module.get_meta_data()
+            return orjson.dumps(metadata)
+        except Exception as e:
+            self.__logger.error(f'__cb_get_metadata ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+            return "{}".encode('utf-8')
+
+    def __cb_get_schemas(self, data: bytes) -> str | bytes:
+        try:
+            schemas = self.module.command_get_schemas()
+            schema_list = []
+            for schema in schemas:
+                if "topic" in schema:
+                    schema_list.append(schema["topic"])
+                else:
+                    schema_list.append(self.module.name)
+            return GetSchemasReply({"topic_names": schema_list}).serialize()
+        except Exception as e:
+            self.__logger.error(f'__cb_get_schemas ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+            return "{}".encode('utf-8')
 
     def __cb_sub_event(self, key: str, data: bytes) -> None:
         try:
@@ -640,6 +690,7 @@ def main(module: Type[IOModule], config_type: Type[BaseConfig], module_name: str
         if not shutdown_ev.is_set():
             module_interface.module.start()
             module_interface.module.command_apply_config()
+            module_interface.module.data_broker.notify_possible_schema_change()
         if not shutdown_ev.is_set():
             module_interface.register()
     except Exception as e_main:

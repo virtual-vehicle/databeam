@@ -25,7 +25,7 @@ from io_modules.math_processor.config import MathProcessorConfig
 # and https://stackoverflow.com/a/68732605
 
 MATH_FUNCTIONS = {f: getattr(math, f) for f in dir(math) if "__" not in f}
-BUILTIN_FUNCTIONS = {f: getattr(builtins, f) for f in ['min', 'max', 'abs', 'pow']}
+BUILTIN_FUNCTIONS = {f: getattr(builtins, f) for f in ['min', 'max', 'abs', 'pow', 'bool', 'int']}
 
 
 def check_math(x: str, *args):
@@ -53,6 +53,8 @@ operators = {ast.Add: op.add,
              ast.Pow: op.pow,
              ast.Call: check_math,
              ast.BitXor: op.xor,
+             ast.BitOr: op.or_,
+             ast.BitAnd: op.and_,
              ast.USub: op.neg,  # unary minus
              ast.UAdd: op.pos,  # unary plus
              ast.UnaryOp: ast.UnaryOp,
@@ -119,7 +121,7 @@ class MathProcessor(IOModule):
                 return Status(error=True, title='invalid config', message=f'{li}: length not valid')
 
         for x in config['input_module_sub_mode_channel']:
-            if len(x.split('#')) != 2 or len(x.split('/')) != 2:
+            if len(x.split('#')) != 2 or not (len(x.split('/')) == 2 or len(x.split('/')) == 3):
                 return Status(error=True, title='invalid config', message=f'{x}: not valid')
 
         for i in config['input_names_internal']:
@@ -164,7 +166,15 @@ class MathProcessor(IOModule):
             for idx, r in enumerate(config['input_module_sub_mode_channel']):
                 # 'PIDController/liveall#output'
                 m, channel = r.split('#')
-                module, mode = m.split('/')
+                split_config = m.split('/')
+                if len(split_config) == 2:
+                    module = split_config[0] + '/' + split_config[0]
+                    mode = split_config[1]
+                elif len(split_config) == 3:
+                    module = split_config[0] + '/' + split_config[1]
+                    mode = split_config[1]
+                else:
+                    return Status(error=False)
                 if module not in modules:
                     modules.append(module)
                     sub_all.append(True if mode == 'liveall' else False)
