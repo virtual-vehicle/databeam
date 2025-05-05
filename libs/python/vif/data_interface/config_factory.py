@@ -98,6 +98,9 @@ class ConfigEntry:
 
         return self
 
+    def sub_properties(self, properties_dict):
+        self._properties['config_properties'] = properties_dict
+
     def get(self) -> Dict:
         """
         Creates a dictionary from the config properties
@@ -140,6 +143,13 @@ class ConfigFactory:
 
     def boolean_array(self, key: str, value: List[bool]) -> ConfigEntry:
         return self._add_entry(key, {'type': 'array', 'default': value, 'items': {'type': 'boolean'}})
+
+    def object(self, key: str, value: "ConfigFactory") -> ConfigEntry:
+        cfg = value.get_config()['properties']
+        entry = self._add_entry(key, {'type': 'object', 'properties': {k:v for k,v in cfg.items() if k != "config_properties"}})
+        entry.sub_properties(cfg['config_properties'])
+        return entry
+
 
     def get_config(self):
         # create module config dict

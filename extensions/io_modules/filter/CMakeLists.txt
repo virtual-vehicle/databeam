@@ -51,6 +51,7 @@ set(SRC_FILES
     ${SOURCE}/JobEntry.cpp
     ${SOURCE}/JobManager.cpp
     ${SOURCE}/McapSchema.cpp
+    ${SOURCE}/ConfigEntry.cpp
     ${SOURCE}/ConfigFactory.cpp
     ${SOURCE}/ConnectionManager.cpp
     ${SOURCE}/ZMQConnectionManager.cpp

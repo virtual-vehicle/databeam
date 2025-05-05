@@ -23,6 +23,7 @@ class Model {
     this.config_module_name = ""
     this.config_entries = []
     this.config_dirty = false
+    this.root_config_entry = null
 
     //jobs
     this.jobs = []
@@ -98,6 +99,7 @@ class Model {
   getTheme() {return this.theme }
   getCaptureRunning() { return this.capture_running }
   getSamplingRunning() { return this.sampling_running }
+  getRootConfigEntry(){return this.root_config_entry}
 
   setEventModulesChanged(state) { this.event_modules_changed = state }
   setEventFilesChanged(state) { this.event_files_changed = state }
@@ -417,8 +419,11 @@ class Model {
     this.config = config_string;
     this.config_module_name = module_name
     this.config_json = JSON.parse(this.config)
+    let old_object_entries = this.getObjectConfigEntries(this.config_entries)
     this.config_entries = []
-    this.walkObject(this.config_json)
+    this.root_config_entry = new ConfigEntry()
+    this.walkObject(this.config_json, this.root_config_entry)
+    this.restoreObjectEntryStates(old_object_entries)
     this.setConfigEntryVisibility()
     this.view.onConfigChanged()
   }
@@ -437,8 +442,11 @@ class Model {
     this.config_module_name = module_name
 
     //parse config entries
+    let old_object_entries = this.getObjectConfigEntries(this.config_entries)
     this.config_entries = []
-    this.walkObject(this.config_json)
+    this.root_config_entry = new ConfigEntry()
+    this.walkObject(this.config_json, this.root_config_entry)
+    this.restoreObjectEntryStates(old_object_entries)
     this.setConfigEntryVisibility()
 
     //set config
@@ -490,13 +498,23 @@ class Model {
     }
     else
     {
-      entry.update(value)
+      if(entry.getType() == "object")
+      {
+        entry.setSubVisible(value)
+      }
+      else 
+      {
+        entry.update(value)
+      }
     }
 
     //updated config string and config inspector
     this.config = JSON.stringify(this.config_json, null, 2)
+    let old_object_entries = this.getObjectConfigEntries(this.config_entries)
     this.config_entries = []
-    this.walkObject(this.config_json)
+    this.root_config_entry = new ConfigEntry()
+    this.walkObject(this.config_json, this.root_config_entry)
+    this.restoreObjectEntryStates(old_object_entries)
     this.setConfigEntryVisibility()
     this.view.onConfigChanged()
   }
@@ -507,10 +525,41 @@ class Model {
     this.config_dirty = config_dirty
     this.config = config_string;
     this.config_json = JSON.parse(this.config)
+    let old_object_entries = this.getObjectConfigEntries(this.config_entries)
     this.config_entries = []
-    this.walkObject(this.config_json)
+    this.root_config_entry = new ConfigEntry()
+    this.walkObject(this.config_json, this.root_config_entry)
+    this.restoreObjectEntryStates(old_object_entries)
     this.setConfigEntryVisibility()
     this.view.onConfigChanged()
+  }
+
+  getObjectConfigEntries(config_entries)
+  {
+    let object_entries = {}
+
+    for(var i = 0; i < config_entries.length; i++)
+    {
+      let e = this.config_entries[i]
+
+      if(e.getType() == "object") object_entries[e.getLabel()] = e
+    } 
+
+    return object_entries
+  }
+
+  restoreObjectEntryStates(old_object_entries)
+  {
+    let object_entries = this.getObjectConfigEntries(this.config_entries)
+
+    for(const [key, value] of Object.entries(object_entries))
+    {
+      if(key in old_object_entries)
+      {
+        //console.log("Restore Object: " + key.toString())
+        value.setSubVisible(old_object_entries[key].getSubVisible())
+      }
+    }
   }
 
   setConfigEntryVisibility()
@@ -532,13 +581,11 @@ class Model {
     }
   }
 
-  walkObject(json)
+  walkObject(json, root, properties = {})
   {
     let keys = Object.keys(json);
 
-    let properties = {}
-
-    if(json.hasOwnProperty("config_properties"))
+    if(Object.keys(properties).length === 0 && json.hasOwnProperty("config_properties"))
     {
       properties = json["config_properties"]
     }
@@ -574,6 +621,7 @@ class Model {
         }
         
         this.config_entries.push(config_entry)
+        root.addEntry(config_entry, this.config_entries.length - 1)
       }
       else if(typeof(obj) == "number")
       {
@@ -582,6 +630,7 @@ class Model {
         config_entry.Set(json, keys[i], type, keys[i]);
         if(keys[i] in properties) config_entry.setProperties(properties[keys[i]])
         this.config_entries.push(config_entry)
+        root.addEntry(config_entry, this.config_entries.length - 1)
       }
       else if(typeof(obj) == "boolean")
       {
@@ -590,6 +639,7 @@ class Model {
         config_entry.Set(json, keys[i], type, keys[i]);
         if(keys[i] in properties) config_entry.setProperties(properties[keys[i]])
         this.config_entries.push(config_entry)
+        root.addEntry(config_entry, this.config_entries.length - 1)
       }
       else if(typeof(obj) == "object")
       {
@@ -600,6 +650,7 @@ class Model {
           config_entry.Set(obj, "array", typeof(obj[0]), keys[i]);
           if(keys[i] in properties) config_entry.setProperties(properties[keys[i]])
           this.config_entries.push(config_entry)
+          root.addEntry(config_entry, this.config_entries.length - 1)
         }
         else{
           type = "object"
@@ -611,7 +662,12 @@ class Model {
 
       if(type == "object")
       {
-        this.walkObject(obj)
+        let config_entry = new ConfigEntry();
+        config_entry.Set(obj, keys[i], "object", keys[i])
+        if(keys[i] in properties) config_entry.setProperties(properties[keys[i]])
+        this.config_entries.push(config_entry)
+        root.addEntry(config_entry, this.config_entries.length - 1)
+        this.walkObject(obj, config_entry, keys[i] in properties ? properties[keys[i]]['config_properties'] : {})
       }
     }
   }

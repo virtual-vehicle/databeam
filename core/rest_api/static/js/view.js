@@ -1210,8 +1210,18 @@ class View
     forms_div.innerHTML = ""
 
     //get config entries
-    let config_entries = this.model.getConfigEntries()
+    //let config_entries = this.model.getConfigEntries()
+    let config_entries = this.model.getRootConfigEntry().getEntryList()
 
+    //create config forms
+    this.createConfigForms(forms_div, config_entries)
+
+    //restore scroll position
+    forms_div.scrollTop = scroll_top_save
+  }
+
+  createConfigForms(forms_div, config_entries)
+  {
     //interate config entries
     for(let i = 0; i < config_entries.length; i++)
     {
@@ -1229,8 +1239,27 @@ class View
       let heading = document.createElement("p")
       heading.setAttribute("class", "config-label")
       heading.innerHTML = entry.getPrettyLabel()
+      let heading_button = undefined
       //forms_div.appendChild(heading)
-      entry_div.appendChild(heading)
+      if(entry.getType() == "object")
+      {
+        heading.style.color = "dodgerblue"
+        let heading_row = document.createElement("div")
+        heading_row.setAttribute("class", "config-header-row")
+        heading_row.appendChild(heading)
+        heading_button = document.createElement("BUTTON");
+        heading_button.innerHTML = "&#128317;"
+        heading_button.className = "config-object-button"
+        heading_row.appendChild(heading_button)
+        //heading.addEventListener(
+        //  "click", event => this.onConfigObjectClick(event, entry.getMember()), true);
+        entry_div.appendChild(heading_row)
+      }
+      else
+      {
+        entry_div.appendChild(heading)
+      }
+      
 
       if(entry.isArray())
       {
@@ -1267,7 +1296,7 @@ class View
 
           let input = document.createElement("INPUT")
           input.setAttribute("class", "config-form")
-          input.setAttribute("config-index", i.toString())
+          input.setAttribute("config-index", entry.getIndex().toString())
           input.setAttribute("array-index", j.toString())
           input.id = "cfb" + i.toString() + "_" + j.toString()
 
@@ -1283,7 +1312,7 @@ class View
             {
               //create fill method select dropdown
               let select = document.createElement("SELECT");
-              select.setAttribute("config-index", i.toString())
+              select.setAttribute("config-index", entry.getIndex().toString())
               select.setAttribute("array-index", j.toString())
               select.id = "cfb" + i.toString() + "_" + j.toString()
 
@@ -1340,7 +1369,7 @@ class View
             var init_string_button = document.createElement("BUTTON");
             init_string_button.innerHTML = "+ string"
             init_string_button.className = "config-array-buttons"
-            init_string_button.setAttribute("config-index", i.toString())
+            init_string_button.setAttribute("config-index", entry.getIndex().toString())
             init_string_button.setAttribute("config-array-type", "string")
             init_string_button.addEventListener("click", event => this.onSubmitInitConfigArray(event), true);
             array_buttons_div.appendChild(init_string_button)
@@ -1348,7 +1377,7 @@ class View
             var init_number_button = document.createElement("BUTTON");
             init_number_button.innerHTML = "+ number"
             init_number_button.className = "config-array-buttons"
-            init_number_button.setAttribute("config-index", i.toString())
+            init_number_button.setAttribute("config-index", entry.getIndex().toString())
             init_number_button.setAttribute("config-array-type", "number")
             init_number_button.addEventListener("click", event => this.onSubmitInitConfigArray(event), true);
             array_buttons_div.appendChild(init_number_button)
@@ -1356,7 +1385,7 @@ class View
             var init_boolean_button = document.createElement("BUTTON");
             init_boolean_button.innerHTML = "+ boolean"
             init_boolean_button.className = "config-array-buttons"
-            init_boolean_button.setAttribute("config-index", i.toString())
+            init_boolean_button.setAttribute("config-index", entry.getIndex().toString())
             init_boolean_button.setAttribute("config-array-type", "boolean")
             init_boolean_button.addEventListener("click", event => this.onSubmitInitConfigArray(event), true);
             array_buttons_div.appendChild(init_boolean_button)
@@ -1372,13 +1401,13 @@ class View
             var add_array_button = document.createElement("BUTTON");
             add_array_button.innerHTML = "+"
             add_array_button.className = "config-array-buttons"
-            add_array_button.setAttribute("config-index", i.toString())
+            add_array_button.setAttribute("config-index", entry.getIndex().toString())
             add_array_button.addEventListener("click", event => this.onSubmitAddConfigArray(event), true);
 
             var sub_array_button = document.createElement("BUTTON");
             sub_array_button.innerHTML = "-"
             sub_array_button.className = "config-array-buttons"
-            sub_array_button.setAttribute("config-index", i.toString())
+            sub_array_button.setAttribute("config-index", entry.getIndex().toString())
             sub_array_button.addEventListener("click", event => this.onSubmitSubConfigArray(event), true);
 
             array_buttons_div.appendChild(sub_array_button)
@@ -1392,7 +1421,7 @@ class View
         {
           //create fill method select dropdown
           let select = document.createElement("SELECT");
-          select.setAttribute("config-index", i.toString())
+          select.setAttribute("config-index", entry.getIndex().toString())
 
           //define available fill options
           let fill_options = entry.getProperties()["options"]
@@ -1414,7 +1443,7 @@ class View
         {
           let input = document.createElement("INPUT")
           input.setAttribute("class", "config-form")
-          input.setAttribute("config-index", i.toString())
+          input.setAttribute("config-index", entry.getIndex().toString())
 
           if(entry.getType() == "string")
           {
@@ -1457,6 +1486,24 @@ class View
             elements_div.appendChild(input);
             entry_div.appendChild(elements_div)
           }
+
+          if(entry.getType() == "object")
+          {
+            //create entry div
+            let sub_entry_div = document.createElement("div")
+            sub_entry_div.id = "sub_cfg_" + entry.getIndex().toString()
+            sub_entry_div.setAttribute("class", "config-entry-div")
+            sub_entry_div.style.marginLeft = "20px"
+            sub_entry_div.style.display = entry.getSubVisible() ? "flex" : "none"
+            entry_div.appendChild(sub_entry_div)
+
+            heading_button.setAttribute("sub-div-id", sub_entry_div.id)
+            heading_button.addEventListener("click", event => this.onConfigToggleObjectDiv(event), true);
+            heading_button.setAttribute("config-index", entry.getIndex().toString())
+
+            //console.log(`Skip Config Entry of type object with key ${entry.getPrettyLabel()}`)
+            this.createConfigForms(sub_entry_div, entry.getEntryList())
+          }
         }
       }
 
@@ -1465,7 +1512,17 @@ class View
     }
 
     //restore scroll position
-    forms_div.scrollTop = scroll_top_save
+    //forms_div.scrollTop = scroll_top_save
+  }
+
+  onConfigToggleObjectDiv(event)
+  {
+    let sub_div_id = event.currentTarget.getAttribute("sub-div-id")
+    let config_index = event.currentTarget.getAttribute("config-index")
+    let sub_div = document.getElementById(sub_div_id)
+    sub_div.style.display = sub_div.style.display == "flex" ? "none" : "flex"
+
+    this.model.updateConfigEntry(config_index, -1, sub_div.style.display == "flex")
   }
 
   onSubmitAddConfigArray(event)

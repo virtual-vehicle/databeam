@@ -61,7 +61,46 @@ TemplateModule::TemplateModule(EnvConfig* env_config)
 
     //generate config with default values via the config factory
     ConfigFactory cfg;
-    cfg.string("some_value", "dummy");
+
+    //generic types
+    cfg.boolean("boolean_field", true).label("Boolean");
+    cfg.integer("integer_field", 1).label("Integer");
+    cfg.number("number_field", 1.0f).label("Float Number");
+    cfg.string("string_field", "Some String").label("String");
+    cfg.string("string_select_field", "Option 1").select({"Option 1", "Option 2", "Option 3"});
+    
+    //generic types vectors
+    cfg.boolean_array("boolean_array", {true, true, false, false}).label("Boolean Array");
+    cfg.integer_array("integer_array", {1, 2, 3, 4}).label("Integer Array");
+    cfg.number_array("number_array", {1.1f, 1.2f, 1.3f, 1.4f}).label("Float Number Array");
+    cfg.string_array("string_array", {"Apple", "Banana", "Orange", "Strawberry"}).label("Resizeable String Array").resizeable();
+
+    //create another config factory for a nested object config
+    ConfigFactory nested_cfg;
+    nested_cfg.integer("integer_field", 1).label("Integer");
+    nested_cfg.string("string_select_field", "Option 1").select({"Option 1", "Option 2", "Option 3"});
+    nested_cfg.integer_array("integer_array", {1, 2, 3, 4}).label("Integer Array");
+
+    //use the nested config factory two create a nested object
+    cfg.object("nested_object", nested_cfg).label("Nested Object");
+
+    //you can also reuse a config factory to define multiple nested objects with the same structure
+    cfg.object("nested_object_2", nested_cfg).label("Nested Object 2");
+
+    //order does not matter, we can extend nested_cfg and it will apply everywhere
+    nested_cfg.boolean("boolean", true).label("Boolean");
+
+    //create another nested config
+    ConfigFactory nested_cfg_2;
+    nested_cfg_2.integer("integer_field", 1).label("Integer 3");
+    cfg.object("nested_object_3", nested_cfg_2).label("Nested Object 3");
+
+    //you can also create nested configs recursively
+    ConfigFactory nested_cfg_3;
+    nested_cfg_3.integer("integer_field", 1).label("Integer 4");
+    nested_cfg_2.object("nested_object_4", nested_cfg_3).label("Nested Object 4");
+
+    //create default config
     default_config = cfg.get_json_str();
 
     //parse default config
@@ -111,7 +150,7 @@ void TemplateModule::applyConfig(Json& json)
     config_json.parse(json_str);
 
     // log current config
-    logger->debug("Config: ");
+    //logger->debug(std::string("Config: \n") + json_str);
 
     // TODO
 }

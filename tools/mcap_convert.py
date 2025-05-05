@@ -3,6 +3,7 @@ import os
 import csv
 import json
 import time
+import traceback
 from pathlib import Path
 from typing import Optional
 
@@ -92,23 +93,29 @@ def elapsed_time_str(seconds):
         return str(round(seconds, 2)) + "s"
 
 
-def meta_to_csv(measurement_path, module_name):
-    module_meta_path = measurement_path / module_name / "module_meta.json"
-    csv_path = measurement_path / module_name / "csv" / "module_meta.csv"
+def meta_to_csv(json_file_path: Path):
+    json_file_path = Path(json_file_path)
 
-    if not os.path.exists(module_meta_path):
-        print("[Convert] Meta data file for " + module_name + " not found - skipping")
-        return
-    print("[Convert] " + module_name + " meta data")
+    if not json_file_path.exists():
+        raise ValueError(f'json_file_path "{json_file_path}" does not exist')
+    if not json_file_path.is_file():
+        raise ValueError(f'json_file_path "{json_file_path}" must be a file')
+    if not json_file_path.name.endswith("module_meta.json"):
+        raise NameError(f'json_file_path "{json_file_path}" must be a module_meta.json file')
 
-    with open(module_meta_path, "r") as f:
+    print(f'[Convert META] file: '
+          f'{json_file_path.parent.parent.name}/{json_file_path.parent.name}/{json_file_path.name}')
+
+    with open(json_file_path, "r") as f:
         meta_dict = json.load(f)
         config_dict = json.loads(meta_dict['config'])
         del config_dict['config_properties']
         del meta_dict['config']
 
         # open the csv file and write meta
+        csv_path = json_file_path.parent / "csv" / (json_file_path.stem + ".csv")
         csv_path.parent.mkdir(parents=True, exist_ok=True)
+
         with open(csv_path, "w", newline="") as csv_file:
             csv_writer = csv.writer(csv_file)
             for k, v in meta_dict.items():
@@ -117,29 +124,20 @@ def meta_to_csv(measurement_path, module_name):
                 csv_writer.writerow([f'config/{k}', v])
 
 
-def mcap_to_csv(measurement_path: Path, module_name: Optional[str] = None) -> None:
-    measurement_path = Path(measurement_path)
-    # compute a path to mcap and csv file
-    if os.path.isfile(measurement_path):
-        if module_name is not None:
-            print("Error: module_name must be None if measurement_path is a file.")
-            return
-        if not measurement_path.name.endswith(".mcap"):
-            print("Error: measurement_path must be a .mcap file.")
-            return
-        input_dir = measurement_path.parent
-        mcap_path = measurement_path
-    else:
-        input_dir = measurement_path / module_name
-        mcap_path = input_dir / (module_name + ".mcap")
+def mcap_to_csv(mcap_file_path: Path) -> None:
+    mcap_file_path = Path(mcap_file_path)
 
-    # check if the file exists
-    if not os.path.exists(mcap_path):
-        print("[Convert] " + mcap_path.name + " not found - skipping")
-        return
-    print("[Convert] " + mcap_path.name)
+    if not mcap_file_path.exists():
+        raise ValueError(f'mcap_file_path "{mcap_file_path}" does not exist')
+    if not mcap_file_path.is_file():
+        raise ValueError(f'mcap_file_path "{mcap_file_path}" must be a file')
+    if not mcap_file_path.name.endswith(".mcap"):
+        raise ValueError(f'mcap_file_path "{mcap_file_path}" must be a .mcap file')
 
-    with open(mcap_path, "rb") as f:
+    print(f'[Convert MCAP] file: '
+          f'{mcap_file_path.parent.parent.name}/{mcap_file_path.parent.name}/{mcap_file_path.name}')
+
+    with open(mcap_file_path, "rb") as f:
         # create mcap reader
         reader = make_reader(f)
 
@@ -173,8 +171,8 @@ def mcap_to_csv(measurement_path: Path, module_name: Optional[str] = None) -> No
             message_count = statistics.channel_message_counts[ch.schema_id]
             mod = int(max(message_count / 100, 1))
 
-            # create csv path
-            csv_path = input_dir / "csv" / (ch.topic + ".csv")
+            # create csv path on same level as mcap file
+            csv_path = mcap_file_path.parent / "csv" / (ch.topic + ".csv")
             csv_path.parent.mkdir(parents=True, exist_ok=True)
 
             # open the csv file
@@ -220,24 +218,48 @@ def mcap_to_csv(measurement_path: Path, module_name: Optional[str] = None) -> No
 
 
 if __name__ == '__main__':
-    # provide a single .mcap file or a databeam-measurement directory
+    # provide a single .mcap file or a directory containing .mcap files
     if len(sys.argv) > 1:
         measurement_arg_path = Path(sys.argv[1])
     else:
-        measurement_arg_path = Path("measurements_0/2025-01-17_09-10-17.357_6_test")
+        from tkinter import filedialog
 
-    if os.path.isfile(measurement_arg_path):
+        # input_path = Path("measurements_0/2025-01-17_09-10-17.357_6_test")
+
+        # select a single MCAP file:
+        # input_path = filedialog.askopenfilename(title="Select a file")
+        # OR
+        # select a directory with MCAP files:
+        input_path = filedialog.askdirectory(title="Select a folder")
+
+        if len(input_path) == 0:
+            exit(0)
+        measurement_arg_path = Path(input_path)
+
+    mcap_files = []
+    json_files = []
+    if measurement_arg_path.is_file() and measurement_arg_path.name.endswith(".mcap"):
         # convert single mcap file
-        mcap_to_csv(measurement_arg_path)
-    else:
-        # convert the whole measurement directory with module-directories
-        dirs = os.listdir(measurement_arg_path)
-        modules = [x for x in dirs if x != "meta.json"]
-        print("Modules: " + str(modules) + "\n")
+        mcap_files.append(measurement_arg_path)
+    elif measurement_arg_path.is_dir():
+        # find all .mcap files recursively in directory
+        for root, dirs, files in os.walk(measurement_arg_path):
+            for file in files:
+                if file.endswith(".mcap"):
+                    mcap_files.append(os.path.join(root, file))
+                elif file.endswith("module_meta.json"):
+                    json_files.append(os.path.join(root, file))
 
-        # iterate all modules
-        for m in modules:
-            # convert mcap to csv
-            mcap_to_csv(measurement_arg_path, m)
-            meta_to_csv(measurement_arg_path, m)
-            print("")
+    for m in mcap_files:
+        try:
+            mcap_to_csv(m)
+        except Exception as e:
+            print(f'Could not convert {m} to csv. Skipped. Error: {type(e).__name__}: {e}\n{traceback.format_exc()}')
+
+    for j in json_files:
+        try:
+            meta_to_csv(j)
+        except NameError:
+            print(f'Could not convert {j} to csv. Skipped.')
+        except Exception as e:
+            print(f'Could not convert {j} to csv. Skipped. Error: {type(e).__name__}: {e}\n{traceback.format_exc()}')

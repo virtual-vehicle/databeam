@@ -13,6 +13,11 @@ class ConfigEntry
     this.visible_str = ""
     this.indent = 0
     this.hidden_flag = false
+    this.index = 0
+
+    this.sub_visible = false
+
+    this.entry_list = []
   }
 
   isArray(){ return Array.isArray(this.parent) }
@@ -31,6 +36,21 @@ class ConfigEntry
   getVisible(){ return this.visible }
   getIndent(){ return this.indent }
   getHiddenFlag() { return this.hidden_flag }
+  setIndex(index) {this.index = index}
+  getIndex() {return this.index }
+  setSubVisible(flag){this.sub_visible = flag}
+  getSubVisible(){return this.sub_visible}
+
+  addEntry(config_entry, index)
+  {
+    config_entry.setIndex(index)
+    this.entry_list.push(config_entry)
+  }
+
+  getEntryList()
+  {
+    return this.entry_list
+  }
 
   hasPropertyFlag(flag)
   {

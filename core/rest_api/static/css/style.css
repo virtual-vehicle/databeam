@@ -655,7 +655,6 @@ hr{
   color: var(--heading_color);
   margin-top: 0px;
   margin-bottom: 2px;
-  width: 100%;
 }
 
 .config-array-buttons {
@@ -686,6 +685,25 @@ hr{
   color: var(--btn_hover_font_color);
 }
 
+.config-object-button {
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 16px;
+  border: none;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  transition-duration: 0.2s;
+  outline: none;
+  cursor: pointer;
+  background-color: transparent;
+}
+
+.config-object-button:hover {
+  transform: scale(1.1);
+}
+
 .config-not-supported-p{
   color: #4CAF50;
   font-style: italic;
@@ -701,6 +719,15 @@ hr{
   flex-direction: row;                   
   justify-content: space-evenly; 
   align-items: center;
+}
+
+.config-header-row {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  margin-bottom: 10px;
 }
 
 .config-form
