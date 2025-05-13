@@ -122,7 +122,8 @@ def _live_proc(shutdown_ev: multiprocessing.synchronize.Event,
     signal.signal(signal.SIGTERM, lambda signum, frame: (shutdown_ev.set(), log_reentrant(f'signal {signum} called')))
 
     cm = ConnectionManager(router_hostname=db_router, db_id=db_id, shutdown_event=shutdown_ev,
-                           logger_name='ConnectionManagerLive', node_name=f"{module_name}_live_data")
+                           logger_name='ConnectionManagerLive', node_name=f"m/{module_name}_live_data",
+                           max_parallel_queryables=0, max_parallel_req=1)
 
     default_pub_key_liveall = Key(db_id, f'm/{module_name}', 'liveall')
     default_pub_key_livedec = Key(db_id, f'm/{module_name}', 'livedec')

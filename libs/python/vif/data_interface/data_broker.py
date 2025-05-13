@@ -1,5 +1,6 @@
 import multiprocessing
 import multiprocessing.synchronize
+from dataclasses import dataclass
 from pathlib import Path
 import re
 from functools import lru_cache
@@ -11,6 +12,12 @@ from vif.data_interface.data_capture_worker import DataCaptureWorker
 from vif.data_interface.data_live_forwarder import DataLiveForwarder
 
 
+@dataclass
+class Capabilities:
+    capture_data: bool
+    live_data: bool
+
+
 class DataBroker(LoggerMixin):
     def __init__(self, *args, db_id: str, db_router: str, data_dir: Path, module_name: str, module_type: str,
                  **kwargs):
@@ -18,6 +25,7 @@ class DataBroker(LoggerMixin):
         self.data_dir = data_dir
         self.module_name = module_name
         self.module_type = module_type
+        self.capabilities: Capabilities = Capabilities(capture_data=True, live_data=True)
 
         # replace the following characters in channel names for mcap compatibility
         self._replace_name_chars_re = re.compile(r'[^a-zA-Z0-9_-]')
@@ -36,25 +44,35 @@ class DataBroker(LoggerMixin):
                                                      schema_change_ev=self._possible_schema_change_event)
 
     def start_capture_process(self):
-        self.data_capture_worker.start_process()
+        if self.capabilities.capture_data:
+            self.data_capture_worker.start_process()
 
     def start_live_process(self):
-        self.data_live_forwarder.start_process()
+        if self.capabilities.live_data:
+            self.data_live_forwarder.start_process()
 
     def configure_live(self, data_config: ModuleDataConfig):
-        self.data_live_forwarder.configure_live(data_config)
+        if self.capabilities.live_data:
+            self.data_live_forwarder.configure_live(data_config)
 
     def get_module_data_dir(self, measurement_name: str) -> Path:
         return self.data_capture_worker.get_module_data_dir(measurement_name)
 
     def prepare_capturing(self, measurement_name: str, data_schemas: List[Dict]):
-        self.data_capture_worker.prepare_capturing(measurement_name, data_schemas)
+        if self.capabilities.capture_data:
+            self.data_capture_worker.prepare_capturing(measurement_name, data_schemas)
 
     def start_capturing(self) -> bool:
-        return self.data_capture_worker.start_capturing()
+        """
+        returns True on error
+        """
+        if self.capabilities.capture_data:
+            return self.data_capture_worker.start_capturing()
+        return False
 
     def stop_capturing(self):
-        self.data_capture_worker.stop_capturing()
+        if self.capabilities.capture_data:
+            self.data_capture_worker.stop_capturing()
 
     def notify_possible_schema_change(self):
         self.logger.debug('possible schema change detected')

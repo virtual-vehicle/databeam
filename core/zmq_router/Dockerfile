@@ -17,6 +17,7 @@ COPY libs/python/vif/logger /python/libs/vif/logger
 # copy app
 COPY core/zmq_router/*.py /app/
 COPY core/zmq_router/start.sh /app/
+RUN chmod a+x /app/start.sh
 
 # update pythonpath
 ENV PYTHONPATH="/python/libs"

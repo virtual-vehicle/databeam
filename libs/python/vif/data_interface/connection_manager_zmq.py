@@ -110,14 +110,14 @@ class RouterConnection(LoggerMixin):
         self._pub_sock = create_connect(f'tcp://{self._router_hostname}:{self._ports.DB_ROUTER_SUB_PORT}', zmq,
                                         zmq.PUB)
 
-        if len(self._node_name) > 0:
+        if len(self._node_name) > 0 and max_parallel_req > 0:
             ident_key = Key(self._db_id, self._node_name, topic='-')
             self._query_req_socks = queue.Queue()
             for i in range(max_parallel_req):
                 self._query_req_socks.put(create_connect(f'tcp://{self._router_hostname}:'
                                                          f'{self._ports.DB_ROUTER_FRONTEND_PORT}',
                                                          zmq, zmq.DEALER, identity=f'{ident_key.ident}{i}'.encode(),
-                                                         timeout_ms=1000))
+                                                         timeout_ms=200))
         else:
             self.logger.debug('node_name not specified: disabled queryables and queries')
             # external routers do not support queries
@@ -137,7 +137,7 @@ class RouterConnection(LoggerMixin):
         self._subscribe_thread = threading.Thread(target=self._subscribe_worker, name='subscribe_worker')
         self._subscribe_thread.start()
 
-        if len(self._node_name) > 0:
+        if len(self._node_name) > 0 and max_parallel_queryables > 0:
             self._queryable_thread = threading.Thread(target=self._queryable_worker, args=(max_parallel_queryables,),
                                                       name='queryable_worker')
             self._queryable_thread.start()
@@ -302,7 +302,7 @@ class RouterConnection(LoggerMixin):
                 self._query_req_socks.put(sock)
                 return rx.payload
             else:
-                self.logger.error(f'request {key} - timeout')
+                self.logger.error(f'request {key} - timeout (limit: {timeout} s)')
         except Exception as e:
             self.logger.error(f'EX request ({type(e).__name__}): {e}\n{traceback.format_exc()}')
 
@@ -461,12 +461,17 @@ class ConnectionManager(LoggerMixin):
         self.logger.info('adding %d external databeams: %s %s', len(db_ids), db_ids, hostnames)
         self._dbid_hostnames = dict(zip(db_ids, hostnames))
 
+    def get_external_databeam_ids(self) -> List[str]:
+        return list(self._dbid_hostnames.keys())
+
     def _add_external_router_connection(self, db_id: str):
         assert self._router_connections_lock.locked(), 'router_connections list not locked!'
         # get details for given db-id
         if db_id not in self._dbid_hostnames:
             raise ValueError(f'no known hostname for DBID {db_id}')
-        new_connection = RouterConnection(db_id=db_id, router_hostname=self._dbid_hostnames[db_id])
+        new_connection = RouterConnection(db_id=db_id, router_hostname=self._dbid_hostnames[db_id],
+                                          node_name=f'{self._db_id}/{self._node_name}', max_parallel_req=1,
+                                          max_parallel_queryables=0)
         self._router_connections[db_id] = new_connection
 
     def declare_queryable(self, key: Key, cb: Callable[[bytes], str | bytes]) -> str:
@@ -488,9 +493,15 @@ class ConnectionManager(LoggerMixin):
         :param timeout: float in seconds
         :return: bytes, or None on error / timeout
         """
-        assert self.initialized, 'connection manager not initialized'
-        assert key.db_id == self._db_id, 'request only allowed to our own DBID'
-        return self._router_connections[self._db_id].request(key, data, timeout)
+        try:
+            assert self.initialized, 'connection manager not initialized'
+            with self._router_connections_lock:
+                if key.db_id not in self._router_connections:
+                    self._add_external_router_connection(key.db_id)
+            return self._router_connections[key.db_id].request(key, data, timeout)
+        except Exception as e:
+            self.logger.error(f'EX CM request ({type(e).__name__}): {e}\n{traceback.format_exc()}')
+            raise e
 
     def subscribe(self, key: Key, cb: Callable[[str, bytes], None]) -> int:
         assert self.initialized, 'connection manager not initialized'

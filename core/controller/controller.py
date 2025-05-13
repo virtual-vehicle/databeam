@@ -14,7 +14,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
 from io import IOBase
-
 import traceback
 from pathlib import Path
 from datetime import datetime, timezone
@@ -35,10 +34,11 @@ from vif.data_interface.network_messages import (Reply, MeasurementState, Module
                                                  Status, StartStop, StartStopReply, MetaDataQuery, MetaDataReply,
                                                  MeasurementStateType, StartStopCmd, ModuleRegistryQueryCmd,
                                                  SystemControlQueryCmd, MetaDataQueryCmd, ExternalDataBeamQueryReply)
+from vif.data_interface.helpers import check_leftover_threads
+from vif.plot_juggler.plot_juggler_writer import PlotJugglerWriter
 
 from meta_handler import MetaHandler
 from job_server import JobServer
-from vif.plot_juggler.plot_juggler_writer import PlotJugglerWriter
 
 
 @environ.config(prefix='')
@@ -91,9 +91,9 @@ class Controller(LoggerMixin):
         self._state: MeasurementState = MeasurementState(state=MeasurementStateType.IDLE)
         self._sampling_active: bool = False
 
-        dbid_list = cfg.DBID_LIST.strip('"').split(',')
+        # register external dbid's if configured
         self._db_id_hostnames = {}
-        for db in dbid_list:
+        for db in cfg.DBID_LIST.strip('"').split(','):
             # format: dbid/hostname.domain:pub_port
             if len(db) > 0:
                 try:
@@ -112,6 +112,8 @@ class Controller(LoggerMixin):
                                                         max_parallel_req=5,  # diminishing returns for more than ~3
                                                         # TODO how many? create dynamically with num. modules .. or s/t
                                                         max_parallel_queryables=10)
+        self._cm.set_external_databeams(list(self._db_id_hostnames.keys()), list(self._db_id_hostnames.values()))
+
         self._pub_topics: Dict[str, Key] = {
             'capture': Key(self._db_id, 'c', 'bc/start_capture'),
             'sampling': Key(self._db_id, 'c', 'bc/start_sampling')
@@ -311,7 +313,8 @@ class Controller(LoggerMixin):
     def _async_module_start_cmd(self, module_name):
         logger = logging.getLogger('_async_module_start_cmd')
         with self._state_lock:
-            if self._state.state == MeasurementStateType.CAPTURING or self._state.state == MeasurementStateType.SAMPLING:
+            if (self._state.state == MeasurementStateType.CAPTURING or
+                    self._state.state == MeasurementStateType.SAMPLING):
                 # prepare capture/sampling on module (wait for reply)
                 if self._state.state == MeasurementStateType.CAPTURING:
                     cmd_string = 'capture'
@@ -472,9 +475,8 @@ class Controller(LoggerMixin):
 
     def _cb_qry_cmd_sampling(self, data: bytes) -> str | bytes:
         """
-        Uses the StartStop and MeasurementState message structs to perform following tasks upon calling:
-            - Start a sampling/capturing
-            - Stop a sampling/capturing
+        Start / stop / restart sampling on all modules.
+        :param data: Serialized StartStop message
         """
         try:
             logger = logging.getLogger('_cb_qry_cmd_sampling')
@@ -488,7 +490,8 @@ class Controller(LoggerMixin):
                 if self._state.state not in [MeasurementStateType.IDLE, MeasurementStateType.SAMPLING]:
                     logger.warning(f'sampling command called in wrong state {str(self._state.state)}')
                     return self.error_ret_startstop(is_error=True, title='c/cmd_sampling',
-                                                    msg=f'sampling command called in wrong state {str(self._state.state)}')
+                                                    msg=f'sampling command called in wrong state '
+                                                        f'{str(self._state.state)}')
 
                 if message.cmd == StartStopCmd.STOP or message.cmd == StartStopCmd.RESTART:
                     logger.info('sending STOP sampling to modules')
@@ -521,7 +524,8 @@ class Controller(LoggerMixin):
             self.logger.error(f'_cb_cmd ({type(e).__name__}): {e}\n{traceback.format_exc()}')
             return self.error_ret_startstop(is_error=True, title=type(e).__name__, msg=str(e))
 
-    def _helper_start_capture(self, logger: logging.Logger) -> Optional[str | bytes]:
+    def _helper_start_capture(self, logger: logging.Logger, message: Optional[StartStop] = None
+                              ) -> Optional[str | bytes]:
         assert self._state_lock.locked(), 'should be locked by _cb_qry_cmd_capture()'
 
         # ignore command if we are already capturing
@@ -542,6 +546,11 @@ class Controller(LoggerMixin):
             'duration': ''
         })
         meta_data = self.meta_handler.get_combined_meta()
+
+        if message.measurement_info is not None:
+            # set same time string the same as remote measurement, but note our true start time in meta-data
+            # fetch time string from name of remote measurement_info (e.g., 2025-01-17_12-30-29.499_42_run_tag)
+            t_string = '_'.join(message.measurement_info.name.split('_')[:2])
 
         self._state.measurement_info.name = get_valid_filename(
             f"{t_string}_{meta_data['run_id']}_{meta_data['run_tag']}", allow_unicode=False)
@@ -651,7 +660,7 @@ class Controller(LoggerMixin):
                         return ret
 
                 if message.cmd == StartStopCmd.START or message.cmd == StartStopCmd.RESTART:
-                    if (ret := self._helper_start_capture(logger)) is not None:
+                    if (ret := self._helper_start_capture(logger, message)) is not None:
                         return ret
 
             # reply OK
@@ -662,7 +671,7 @@ class Controller(LoggerMixin):
 
     def _cb_qry_get_state(self, data: bytes) -> str | bytes:
         """
-        Logs the current measurement state upon calling.
+        Returns the current measurement state
         """
         try:
             logger = logging.getLogger('_cb_qry_get_state')
@@ -674,7 +683,7 @@ class Controller(LoggerMixin):
 
     def _cb_qry_ping(self, data: bytes) -> str | bytes:
         """
-        Receives a ping from a module and returns a pong to acknowledge connectivity.
+        Receives a "ping" from a module and returns a "pong" to acknowledge connectivity.
         """
         logger = logging.getLogger('_cb_qry_ping')
         try:
@@ -687,8 +696,8 @@ class Controller(LoggerMixin):
                 return "pong".encode('utf-8')
         except Exception as e:
             self.logger.error(f'_cb_qry_ping ({type(e).__name__}): {e}\n{traceback.format_exc()}')
-        logger.warning('rx <%s> but replied with error', module_name)
-        return "error".encode('utf-8')
+        logger.warning('rx <%s> but replied with "unknown"', module_name)
+        return "pong_unknown".encode('utf-8')
 
     def _async_metadata_changed(self):
         event_job = EventJob(self._cm, self._db_id)
@@ -867,7 +876,4 @@ if __name__ == '__main__':
         shutdown_evt.wait()
     controller.stop()
 
-    num_threads_left = threading.active_count() - 1
-    logger_main.debug(f'done - threads left: {num_threads_left}')
-    if num_threads_left > 0:
-        logger_main.info(f'threads left: {[thread.name for thread in threading.enumerate()]}')
+    logger_main.debug(check_leftover_threads())

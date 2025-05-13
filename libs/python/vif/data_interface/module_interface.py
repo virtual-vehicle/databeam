@@ -83,8 +83,6 @@ class ModuleInterface(LoggerMixin):
         self.__controller_watchdog_thread: Optional[threading.Thread] = None
 
         self.state: MeasurementState = MeasurementState(state=MeasurementStateType.IDLE)
-        self.data_config: ModuleDataConfig = ModuleDataConfig(enable_capturing=True, enable_live_all_samples=False,
-                                                              enable_live_fixed_rate=False, live_rate_hz=1)
         self._sampling_active = False  # remember if sampling was explicitly enabled
         self.config_handler = ConfigHandler(config_type=config_type)
         self.live_data_receiver = LiveDataReceiver(con_mgr=self.cm, databeam_id=self.db_id)
@@ -103,8 +101,16 @@ class ModuleInterface(LoggerMixin):
         # create io module instance
         self.module = io_module_type(module_interface=self)
 
-    def log_gui(self, message: str) -> None:
-        self.__logger.debug("log_gui: %s", message)
+        # capturing is disabled per default if module sets it's capabilities accordingly
+        self.data_config: ModuleDataConfig = ModuleDataConfig(
+            enable_capturing=self.data_broker.capabilities.capture_data,
+            enable_live_all_samples=False,
+            enable_live_fixed_rate=False,
+            live_rate_hz=1)
+
+    def log_gui(self, message: str, log_severity=logging.DEBUG) -> None:
+        if log_severity > logging.NOTSET:
+            self.__logger.log(log_severity, "log_gui: %s", message)
         time_ns = datetime.now(timezone.utc)
         time_str = time_ns.strftime("%H:%M:%S.%f")
         log_job = LogJob(self.cm, self.db_id)
@@ -408,6 +414,8 @@ class ModuleInterface(LoggerMixin):
             if message.cmd == StartStopCmd.START:
                 if self.state.state == MeasurementStateType.IDLE:
                     logger.debug('prepare sampling')
+                    self.module.command_state_change(command=StartStopCmd.START,
+                                                     related_state=MeasurementStateType.SAMPLING)
                     self.module.command_prepare_sampling()
                     self.state.state = MeasurementStateType.PREPARE_SAMPLING
                 else:
@@ -451,6 +459,7 @@ class ModuleInterface(LoggerMixin):
 
             if message.cmd == StartStopCmd.STOP:
                 logger.debug('stop sampling')
+                self.module.command_state_change(command=StartStopCmd.STOP, related_state=MeasurementStateType.SAMPLING)
                 self.module.command_stop_sampling()
                 self.state.state = MeasurementStateType.IDLE
                 self._sampling_active = False
@@ -482,6 +491,7 @@ class ModuleInterface(LoggerMixin):
 
             # save measurement infos
             self.state.measurement_info = MeasurementInfo.from_dict(message.get_dict())
+            self.module.command_state_change(command=StartStopCmd.START, related_state=MeasurementStateType.CAPTURING)
 
             if self.data_config.enable_capturing \
                     or self.data_config.enable_live_all_samples \
@@ -529,7 +539,7 @@ class ModuleInterface(LoggerMixin):
                 raise ValueError(f'Unknown command for {str(key)}: {message.cmd.name}')
 
             # write meta-data to .json file
-            if self.state.measurement_info.name != '' and self.data_config.enable_capturing:
+            if self.state.measurement_info.name != '':
                 meta = self.module.get_meta_data()
                 config = self.config_handler.config
                 additional_meta_data = [("config", json.dumps(config)),
@@ -552,7 +562,6 @@ class ModuleInterface(LoggerMixin):
             # reset the measurement name on stop
             if message.cmd == StartStopCmd.STOP:
                 self.state.measurement_info = MeasurementInfo()
-                #self.state.measurement_info.Clear()
 
         except Exception as e:
             self.__logger.error(f'__cb_sub_capture ({type(e).__name__}): {e}\n{traceback.format_exc()}')
@@ -564,6 +573,8 @@ class ModuleInterface(LoggerMixin):
             logger.debug('rx: %s', message.serialize())
 
             if message.cmd == StartStopCmd.STOP:
+                self.module.command_state_change(command=StartStopCmd.STOP,
+                                                 related_state=MeasurementStateType.CAPTURING)
                 self.module.command_stop_capturing()
                 if self._sampling_active:
                     logger.debug('keep sampling active')

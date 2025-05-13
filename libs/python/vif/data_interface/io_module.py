@@ -1,10 +1,10 @@
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Optional
 
 from vif.logger.logger import LoggerMixin
 from vif.data_interface.config_handler import ConfigHandler
 from vif.data_interface.data_broker import DataBroker
 
-from vif.data_interface.network_messages import Status, IOEvent
+from vif.data_interface.network_messages import Status, IOEvent, MeasurementStateType, MeasurementInfo, StartStopCmd
 
 
 class IOModule(LoggerMixin):
@@ -52,6 +52,14 @@ class IOModule(LoggerMixin):
         Called by module interface when a config event is received.
         :param cfg_key: Contains the event name
         :return: None
+        """
+        pass
+
+    def command_state_change(self, command: StartStopCmd, related_state: MeasurementStateType) -> None:
+        """
+        Called by module interface to inform about upcoming (!) state change.
+        :param command: StartStopCmd.START or StartStopCmd.STOP
+        :param related_state: upcoming MeasurementStateType affected by command
         """
         pass
 

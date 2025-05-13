@@ -101,7 +101,6 @@ ModuleInterface::ModuleInterface(IOModule* io_module, EnvConfig* env_config, Log
   connection_manager->subscribe(env_config->get("DB_ID") + "/m/" + module_name + "/event_in", this);
   connection_manager->subscribe(env_config->get("DB_ID") + "/c/bc/start_capture", this);
   connection_manager->subscribe(env_config->get("DB_ID") + "/c/bc/start_sampling", this);
-  //connection_manager->subscribe("wavei/m/Ping/livedec", this);
   logger->debug("Successfully declared queryables and subcriptions.");
 }
 

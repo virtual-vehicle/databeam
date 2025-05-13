@@ -218,26 +218,45 @@ def mcap_to_csv(mcap_file_path: Path) -> None:
 
 
 if __name__ == '__main__':
-    # provide a single .mcap file or a directory containing .mcap files
-    if len(sys.argv) > 1:
-        measurement_arg_path = Path(sys.argv[1])
+    # we expect exactly one argument
+    if len(sys.argv) == 2:
+        # get argument string
+        arg_string = sys.argv[1]
+
+        # open file dialog if -gui option is given
+        if arg_string == "-gui":
+            try:
+                from tkinter import filedialog
+            except ModuleNotFoundError:
+                print('Failed to import tkinter package.')
+                sys.exit(0)
+
+            # get input path
+            input_path = filedialog.askdirectory(title="Select a folder")
+
+            # make sure path is valid
+            if len(input_path) == 0:
+                print("No input file selected.")
+                sys.exit(0)
+
+            measurement_arg_path = Path(input_path)
+        else:
+            measurement_arg_path = Path(arg_string)
     else:
-        from tkinter import filedialog
+        print("\nConvert a mcap file to a csv file.\n\n" +
+            " Usage: \n" +
+            "   python mcap_convert.py <path_to_mcap_file.mcap>         // convert mcap file\n" +
+            "   python mcap_convert.py <path_to_module_directory>       // convert module\n" +
+            "   python mcap_convert.py <path_to_measurement_directory>  // convert all modules of measurement\n" +
+            "   python mcap_convert.py -gui                             // open file dialog, requires tkinter package\n")
 
-        # input_path = Path("measurements_0/2025-01-17_09-10-17.357_6_test")
+        sys.exit(0)
 
-        # select a single MCAP file:
-        # input_path = filedialog.askopenfilename(title="Select a file")
-        # OR
-        # select a directory with MCAP files:
-        input_path = filedialog.askdirectory(title="Select a folder")
-
-        if len(input_path) == 0:
-            exit(0)
-        measurement_arg_path = Path(input_path)
-
+    # holds mcap and json file paths
     mcap_files = []
     json_files = []
+
+    # create list of mcap and json file paths
     if measurement_arg_path.is_file() and measurement_arg_path.name.endswith(".mcap"):
         # convert single mcap file
         mcap_files.append(measurement_arg_path)
@@ -249,6 +268,11 @@ if __name__ == '__main__':
                     mcap_files.append(os.path.join(root, file))
                 elif file.endswith("module_meta.json"):
                     json_files.append(os.path.join(root, file))
+
+    # make sure at least one mcap file was found
+    if not mcap_files:
+        print("No mcap files found.")
+        sys.exit(0)
 
     for m in mcap_files:
         try:

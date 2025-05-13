@@ -8,9 +8,9 @@ from vif.data_interface.connection_manager import ConnectionManager, Key
 from vif.data_interface.network_messages import MeasurementState
 
 
-def ping_controller(cm: ConnectionManager, db_id: str, module_name: str = '') -> bool:
-    reply = cm.request(Key(db_id, 'c', 'ping'), data=module_name.encode('utf-8'), timeout=1)
-    if reply is not None and reply.decode("utf-8") == "pong":
+def ping_controller(cm: ConnectionManager, db_id: str, module_name: str = '', timeout=1.0) -> bool:
+    reply = cm.request(Key(db_id, 'c', 'ping'), data=module_name.encode('utf-8'), timeout=timeout)
+    if reply is not None and "pong" in reply.decode("utf-8"):
         return True
     return False
 

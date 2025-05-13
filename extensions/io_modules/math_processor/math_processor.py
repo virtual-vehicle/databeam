@@ -172,7 +172,7 @@ class MathProcessor(IOModule):
                     mode = split_config[1]
                 elif len(split_config) == 3:
                     module = split_config[0] + '/' + split_config[1]
-                    mode = split_config[1]
+                    mode = split_config[2]
                 else:
                     return Status(error=False)
                 if module not in modules:

@@ -27,6 +27,8 @@ The following will be installed:
 * Python: python3, python3-pip, python3-venv
 * C++ build support: pipx, cmake, ninja-build, libusb-1.0-0-dev, pkg-config
 
+> **_NOTE:_** To allow for more complicated USB device setups, the development make rule increases the USB memory in the systems Grub configuration to 1000 MB.
+
 A Python virtual environment will be created in `extensions/.venv` to run custom extensions.
 
 For the Docker build process, base-images are needed. Build or update by running:
@@ -34,8 +36,6 @@ For the Docker build process, base-images are needed. Build or update by running
 BUILD_LOCAL=1 make pull-images
 BUILD_LOCAL=1 make base-all
 ```
-
-> **_NOTE:_** To allow for more complicated USB device setups, the development make rule increases the USB memory in the systems Grub configuration to 1000 MB.
 
 ### Update Development Environment
 #### Update Base-Images

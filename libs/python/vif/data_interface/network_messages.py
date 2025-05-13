@@ -383,16 +383,19 @@ class StartStopCmd(IntEnum):
 
 
 class StartStop:
-    def __init__(self, cmd: StartStopCmd):
-        self.cmd = cmd
+    def __init__(self, cmd: StartStopCmd, measurement_info: Optional[MeasurementInfo] = None):
+        self.cmd: StartStopCmd = cmd
+        self.measurement_info: Optional[MeasurementInfo] = measurement_info
 
     def serialize(self) -> str:
-        return json.dumps({'cmd': self.cmd.value})
+        return json.dumps({'cmd': self.cmd.value,
+                           'measurement_info': self.measurement_info.get_dict() if self.measurement_info else None})
 
     @classmethod
     def deserialize(cls, json_str: Union[str, bytes]) -> Self:
         data = json.loads(json_str)
-        return cls(StartStopCmd(data['cmd']))
+        return cls(StartStopCmd(data['cmd']),
+                   MeasurementInfo.from_dict(data['measurement_info']) if data['measurement_info'] else None)
 
 
 class StartStopReply(Reply):
@@ -530,6 +533,9 @@ if __name__ == '__main__':
 
     # start stop test
     start_stop = StartStop(StartStopCmd.START)
+    start_stop_str = start_stop.serialize()
+    start_stop_deserialized = StartStop.deserialize(start_stop_str)
+    start_stop = StartStop(StartStopCmd.START, meas_info)
     start_stop_str = start_stop.serialize()
     start_stop_deserialized = StartStop.deserialize(start_stop_str)
 
