@@ -2,8 +2,9 @@
 Start/stop Signal Forwarder to external DataBeam
 """
 import logging
+import threading
 import traceback
-from typing import Dict, Optional
+from typing import Dict
 from concurrent.futures import ThreadPoolExecutor
 
 import environ
@@ -43,6 +44,21 @@ class StartStopForwarder(IOModule):
     def command_validate_config(self, config: Dict) -> Status:
         return Status(error=False)
 
+    def _prepare_connections_worker(self):
+        logger = logging.getLogger('prepare_connections')
+        # add external router connections by pinging once
+        for db in self.followers_db_ids:
+            try:
+                logger.info('pinging follower: ' + db)
+                ret = ping_controller(self.module_interface.cm, db_id=db,
+                                      module_name=f'{self.module_interface.db_id}/m/{self.name}', timeout=0.5)
+                if ret is False:
+                    logger.warning('ping failed for follower: ' + db)
+                else:
+                    logger.info('ping success for follower: ' + db)
+            except Exception as e:
+                logger.error(f'EX pinging follower {db}: {type(e).__name__}: {e}\n{traceback.format_exc()}')
+
     def command_apply_config(self) -> Status:
         # get a local copy of the current config
         config = self.config_handler.config
@@ -59,13 +75,8 @@ class StartStopForwarder(IOModule):
                 else:
                     self.followers_db_ids.append(dbid)
 
-            # add external router connections by pinging once
-            for db in self.followers_db_ids:
-                self.logger.info('pinging follower: ' + db)
-                ret = ping_controller(self.module_interface.cm, db_id=db,
-                                      module_name=f'{self.module_interface.db_id}/m/{self.name}', timeout=0.1)
-                if ret is False:
-                    self.logger.warning('ping failed for follower: ' + db)
+            # do not wait for router-connection-preparation - might take a few 100 ms
+            threading.Thread(target=self._prepare_connections_worker, daemon=True).start()
             return Status(error=False)
 
         except Exception as e:
@@ -80,10 +91,6 @@ class StartStopForwarder(IOModule):
         else:
             self.logger.error('wrong cmd_type: ' + cmd_type.name)
             return
-
-        # if cmd_type not in ['cmd_sampling', 'cmd_capture']:
-        #     self.logger.error('wrong cmd_type: ' + cmd_type)
-        #     return
 
         # forward message (fire and forget) to all following DataBeams
         if len(self.followers_db_ids) > 0:
@@ -110,35 +117,6 @@ class StartStopForwarder(IOModule):
         if not self.module_interface.shutdown_ev.is_set():
             self.logger.info('state change! %s / %s', related_state.name, command.name)
             self._send_cmd(related_state, command, timeout=(2 - 0.5) if command == StartStopCmd.START else (5 - 0.5))
-
-    def command_prepare_sampling(self, interim: bool = False):
-        pass
-        # self.logger.info('prepare sampling!')
-        # if not interim:
-        #     self._send_cmd(MeasurementStateType.SAMPLING, StartStopCmd.START, timeout=2 - 0.5)
-
-    def command_start_sampling(self, interim: bool = False):
-        pass
-
-    def command_stop_sampling(self, interim: bool = False):
-        pass
-        # self.logger.info('stop sampling!')
-        # if not interim and not self.module_interface.shutdown_ev.is_set():
-        #     self._send_cmd(MeasurementStateType.SAMPLING, StartStopCmd.STOP, timeout=5 - 0.5)
-
-    def command_prepare_capturing(self) -> None:
-        pass
-        # self.logger.info('prepare capturing!')
-        # self._send_cmd(MeasurementStateType.CAPTURING, StartStopCmd.START, timeout=2 - 0.5)
-
-    def command_start_capturing(self) -> None:
-        pass
-
-    def command_stop_capturing(self) -> None:
-        pass
-        # self.logger.info('stop capturing!')
-        # if not self.module_interface.shutdown_ev.is_set():
-        #     self._send_cmd(MeasurementStateType.CAPTURING, StartStopCmd.STOP, timeout=5 - 0.5)
 
 
 if __name__ == '__main__':

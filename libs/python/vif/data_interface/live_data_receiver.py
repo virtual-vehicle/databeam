@@ -19,10 +19,6 @@ class LiveDataReceiver(LoggerMixin):
         self._data_callback: Optional[Callable[[str, str, Dict | str], None]] = None
         self._raw_json_string = False
 
-    def receive_module_schemas(self, module_name: str) -> List[str]:
-        module_schemas = self._cm.request(Key(self._db_id, f'm/{module_name}', "get_schemas"))
-        return GetSchemasReply.deserialize(module_schemas).get_topic_names_list()
-
     def receive_raw_json_string(self, enabled: bool):
         self._raw_json_string = enabled
 

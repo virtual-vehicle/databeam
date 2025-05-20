@@ -227,6 +227,10 @@ void DataBroker::prepareCapture(std::string module_name, std::string module_type
         return;
     }
 
+    //only prepare mcap file if capturing is enabled
+    if(!data_config->getEnableCapturing()) return;
+
+    //log start
     logger->debug("[DataBroker] start measurement, prepare MCAP write.");
 
     //re-create mcap writer
@@ -282,9 +286,9 @@ void DataBroker::startCapture()
         return;
     }
 
-    if(!mcap_open)
+    if(!mcap_open && data_config->getEnableCapturing())
     {
-        logger->warning("[DataBroker] MCAP file not open on startCapture.");
+        logger->warning("[DataBroker] MCAP file not open on startCapture with enabled capturing.");
         return;
     }
 
@@ -303,7 +307,7 @@ void DataBroker::stopCapture()
     }
 
     lock();
-    if(mcap_writer != nullptr) mcap_writer->close();
+    if(mcap_writer != nullptr && mcap_open) mcap_writer->close();
     mcap_open = false;
     capture_running = false;
     unlock();
@@ -401,7 +405,7 @@ void DataBroker::data_in(long long timestamp, JsonWriter &json_writer, unsigned 
     }
     
     //write to mcap file if capture is running and mcap flag is set
-    if(capture_running && mcap)
+    if(capture_running && mcap && mcap_open)
     {
         if(schema_index >= channel_ids.size())
         {

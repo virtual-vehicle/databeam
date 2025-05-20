@@ -128,6 +128,9 @@ class NMEAReader(IOModule):
                     (raw_data, parsed_data) = nmr.read()
                 except serial.SerialException:
                     parsed_data = None
+                except Exception as e:
+                    self.logger.error(f'EX NMEA read {type(e).__name__}: {e}')
+                    continue
 
                 time_rx = time.time_ns()
 
@@ -140,6 +143,8 @@ class NMEAReader(IOModule):
                             _dummy = stream.recv(2, socket.MSG_DONTWAIT | socket.MSG_PEEK)
                             if len(_dummy) == 0:
                                 continue
+                        except TimeoutError:
+                            continue  # ignore timeouts if GNSS does not send data
                         except Exception as e:
                             self.logger.error(f'EX worker {type(e).__name__}: {e}')
                             stream = _connect_tcp()
@@ -160,10 +165,10 @@ class NMEAReader(IOModule):
                         return
 
                     nmr = pynmeagps.NMEAReader(stream)
-                    self.module_interface.set_ready_state(True)
                     continue
 
                 # self.logger.debug('%s', parsed_data)
+                self.module_interface.set_ready_state(True)
 
                 if parsed_data.msgID == 'THS':  # for heading
                     try:
@@ -177,11 +182,11 @@ class NMEAReader(IOModule):
                             data.pop('heading_status')
                 elif parsed_data.msgID == 'ASHR':  # orientation
                     try:
-                        data['roll'] = parsed_data.roll
-                        data['pitch'] = parsed_data.pitch
-                        data['imuAlign'] = parsed_data.imuAlign  # int
+                        data['roll'] = float(parsed_data.roll)
+                        data['pitch'] = float(parsed_data.pitch)
                         if 'heading' not in data:
-                            data['heading'] = parsed_data.trueHdg
+                            data['heading'] = float(parsed_data.trueHdg)
+                        data['imuAlign'] = parsed_data.imuAlign  # int
                     except ValueError:
                         if 'roll' in data:
                             data.pop('roll')

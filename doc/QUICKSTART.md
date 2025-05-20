@@ -17,13 +17,6 @@ BUILD_LOCAL=1 make update
 BUILD_LOCAL=1 make core-apps module-ping
 ```
 
-Edit `.env`:
-```
-...
-DB_ID=quickstart
-...
-```
-
 Edit `docker-compose.yml`:
 ```
 # uncomment the line:

@@ -13,6 +13,11 @@ RUN pip install -r requirements_core.txt -r requirements_module.txt -r requireme
 FROM ${DEPLOY_IMAGE} AS deploy-image
 ARG MODULE_NAME=startstop_forwarder
 
+RUN apt-get -y --no-install-recommends install avahi-daemon avahi-utils libnss-mdns
+RUN printf "[server]\nenable-dbus=no\n" >> /etc/avahi/avahi-daemon.conf
+COPY extensions/system/${MODULE_NAME}/entrypoint.sh /
+RUN chmod +x /entrypoint.sh
+
 COPY --from=build-image /opt/venv /opt/venv
 
 # copy data-interface dependencies
@@ -36,4 +41,5 @@ ENV PYTHONPATH="/python/extensions:/python/libs"
 ENV PATH="/opt/venv/bin:$PATH"
 # run
 WORKDIR /python/extensions/system/${MODULE_NAME}
+ENTRYPOINT ["bash", "/entrypoint.sh"]
 CMD ["python3", "startstop_forwarder.py"]

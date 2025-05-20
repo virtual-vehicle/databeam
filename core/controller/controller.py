@@ -548,7 +548,7 @@ class Controller(LoggerMixin):
         meta_data = self.meta_handler.get_combined_meta()
 
         if message.measurement_info is not None:
-            # set same time string the same as remote measurement, but note our true start time in meta-data
+            # set time string the same as remote measurement, but keep note of our true start time in meta-data
             # fetch time string from name of remote measurement_info (e.g., 2025-01-17_12-30-29.499_42_run_tag)
             t_string = '_'.join(message.measurement_info.name.split('_')[:2])
 

@@ -3,6 +3,8 @@ import os
 import sys
 import time
 from functools import cached_property
+from contextlib import contextmanager
+from collections.abc import Iterator
 
 
 class LoggerMixin:
@@ -36,6 +38,29 @@ class LoggerMixin:
     def static_logger(cls) -> logging.Logger:
         name = cls.__name__
         return logging.getLogger(name)
+
+    @contextmanager
+    def time_it(self, prefix: str, limit_ms: float, log_severity=logging.WARNING) -> Iterator[None]:
+        """
+        Context manager for measuring the execution time of a block of code and logging it
+        if it exceeds a specified time limit. This can help in identifying performance
+        bottlenecks by monitoring the duration of operations.
+        Very low overhead.
+
+        :param prefix: A string used as a message prefix when logging the duration.
+        :param limit_ms: A float representing the maximum allowed duration in milliseconds.
+        :param log_severity: Logging severity level from the ``logging`` module to use when
+            the log message is emitted. Defaults to ``logging.WARNING``.
+        :return: Yields control back to the caller allowing the execution of a code block
+            within the context.
+        """
+        tic: int = time.perf_counter_ns()
+        try:
+            yield
+        finally:
+            toc: int = time.perf_counter_ns()
+            if toc - tic > limit_ms * 1e6:
+                self.logger.log(log_severity, f"%s took = %.3f ms", prefix, (toc - tic) / 1e6)
 
 
 def log_reentrant(message: str):

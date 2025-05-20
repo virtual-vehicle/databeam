@@ -37,6 +37,9 @@ RUN pipx ensurepath
 RUN pipx install conan
 RUN /root/.local/bin/conan profile detect --force
 
+COPY libs/thirdparty/conanfile.txt /libs/thirdparty/
+RUN /root/.local/bin/conan install /libs/thirdparty --update --build=missing
+
 # use libs in module-image:
 # FROM ${BUILD_IMAGE} as build-image
 # FROM ${DEPLOY_IMAGE} AS deploy-image

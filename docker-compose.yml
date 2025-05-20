@@ -36,7 +36,7 @@ services:
       - DB_ROUTER_SUB_PORT=${DB_ROUTER_SUB_PORT}
       - DB_ROUTER_PUB_PORT=${DB_ROUTER_PUB_PORT}
       - HOST_NAME_FILE=${HOST_NAME_FILE}
-      # - DBID_LIST=dbid/databeam.local,dbid2/databeam2.local
+      # - DBID_LIST=dbid1/192.168.1.10,dbid2/192.168.1.11
     volumes:
       - ${ROOT_DIR}/config:${DB_CONFIG_DIRECTORY}
       - ${ROOT_DIR}/data:${DB_DATA_DIRECTORY}
@@ -48,6 +48,8 @@ services:
         condition: service_healthy
     networks:
       - internal_nw
+      # optionally expose controller, if other DataBeam connects with startstop-forwarder
+      # - public_nw
     stop_grace_period: 10s
 
   rest_api:

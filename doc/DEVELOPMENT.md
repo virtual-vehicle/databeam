@@ -83,7 +83,7 @@ Modify local DataBeam-ID `DB_ID` to something unique like *testinstance* in `.en
 
 Modify `docker-compose.yml` to your wishes.
 
-Build (add other modules in make command if needed by docker-compose):
+Build example (add other modules in make command if needed by docker-compose):
 ```
 BUILD_LOCAL=1 make core-apps module-ping
 ```

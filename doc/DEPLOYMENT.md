@@ -34,13 +34,20 @@ Some hardware devices might require setting `privileged: true` or mapping of hos
 This is also the place to edit environment variables on a per-module basis.
 
 ### Environment Variables for IO-Modules
-| Variable                                     | Description |
-| :------------------------------------------- | ------ |
-| **LOGLEVEL** | Available log-levels: DEBUG, INFO, WARNING, ERROR
-| **CONFIG_DIR** | Directory used to store configuration files. Will be suffixed with *DEPLOY_VERSION*
-| **DATA_DIR** | Directory used to store data files. Will be suffixed with *DEPLOY_VERSION*
+| Variable     |              Description              |
+| :----------- | ------------------------------------- |
+| **LOGLEVEL** | Available log-levels: DEBUG, INFO, WARNING, ERROR |
+| **CONFIG_DIR** | Directory used to store configuration files.<br>Will be suffixed with *DEPLOY_VERSION*. |
+| **DATA_DIR** | Directory used to store data files.<br>Will be suffixed with *DEPLOY_VERSION*. |
 | **DEPLOY_VERSION** | Tag used for docker images.
-| **DB_ID** | DataBeam domain name for communication. Must be unique in network.
-| **DB_ROUTER** | DataBeam router hostname to find other nodes.
+| **DB_ID** | DataBeam domain name for communication.<br>Must be unique in interconnected instances. |
+| **DB_ROUTER** | DataBeam router hostname for communication.<br>Either `zmq_router` or `localhost` (if container runs in network mode `host`). |
+
+### Environment Variables for Controller
+| Variable     |              Description              |
+| :----------- | ------------------------------------- |
+| **.. all above ..** | Module parameters apply. |
+| **HOST_NAME_FILE** | Internal path to host-OS hostname. |
+| **DBID_LIST** | Optional: specify comma-separated list of tuples of DataBeam IDs and hostnames.<br>Format: `dbid1/192.168.1.10,dbid2/192.168.1.1`<br>Prefer IPs! Only use local mDNS hostnames if accessing containers run Avahi daemon and are configured to run in network mode `host`.|
 
 <div align="right">(<a href="README.md">back to README</a>)</div>

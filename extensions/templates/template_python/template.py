@@ -118,6 +118,15 @@ class Template(IOModule):  # TODO adopt module name
             self.logger.error(f'error applying config: {type(e).__name__}: {e}\n{traceback.format_exc()}')
             return Status(error=True, title=type(e).__name__, message=str(e))
 
+    def command_config_event(self, cfg_key: str) -> None:
+        self.logger.debug('Received event_data: %s', cfg_key)
+
+        # TODO this callback is just a demo for "button" in config (can be removed if not used)
+        if cfg_key == 'my_button':
+            self.logger.info('Button was pressed!')
+        else:
+            self.logger.warning('Received unknown config event.')
+
     def command_prepare_sampling(self):
         self.logger.info('prepare sampling!')
         self._start_thread()

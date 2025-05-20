@@ -5,11 +5,12 @@ FROM ${BUILD_IMAGE} AS build-image
 
 ARG MODULE_NAME=template_module
 
-COPY libs/cpp /libs/cpp
-COPY libs/thirdparty/conanfile.txt /libs/thirdparty/
 COPY deploy/scripts/build_cpp_module.sh /extensions/io_modules/${MODULE_NAME}/
+COPY libs/thirdparty/conanfile.txt /libs/thirdparty/
 COPY extensions/io_modules/${MODULE_NAME}/conanfile.txt /extensions/io_modules/${MODULE_NAME}/
 COPY extensions/io_modules/${MODULE_NAME}/CMakeLists.txt /extensions/io_modules/${MODULE_NAME}/
+
+COPY libs/cpp /libs/cpp
 COPY extensions/io_modules/${MODULE_NAME}/*.cpp /extensions/io_modules/${MODULE_NAME}/
 COPY extensions/io_modules/${MODULE_NAME}/header /extensions/io_modules/${MODULE_NAME}/header
 COPY extensions/io_modules/${MODULE_NAME}/source /extensions/io_modules/${MODULE_NAME}/source

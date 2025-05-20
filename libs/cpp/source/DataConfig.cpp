@@ -25,6 +25,11 @@ bool DataConfig::getAllEnabled()
     return enable_live_all_samples;
 }
 
+bool DataConfig::getEnableCapturing()
+{
+    return enable_capturing;
+}
+
 bool DataConfig::getFixedEnabled()
 {
     return enable_live_fixed_rate;

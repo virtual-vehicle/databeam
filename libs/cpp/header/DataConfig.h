@@ -17,6 +17,7 @@ public:
     double getFixedDeltaTime();
     bool getFixedEnabled();
     bool getAllEnabled();
+    bool getEnableCapturing();
 private:
     void storeToFile();
     void readFromFile();

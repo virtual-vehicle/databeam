@@ -86,6 +86,7 @@ class ModuleInterface(LoggerMixin):
         self._sampling_active = False  # remember if sampling was explicitly enabled
         self.config_handler = ConfigHandler(config_type=config_type)
         self.live_data_receiver = LiveDataReceiver(con_mgr=self.cm, databeam_id=self.db_id)
+        self.event_pub = None
 
         # create ready job
         self._ready_job: ReadyJob = ReadyJob(self.cm, self.db_id)
@@ -193,7 +194,7 @@ class ModuleInterface(LoggerMixin):
             self.cm.declare_queryable(q_key, q_cb)
 
         # register publishers
-        self.cm.declare_publisher(Key(self.db_id, f'm/{self.name}', 'event_out'))
+        self.event_pub = self.cm.declare_publisher(Key(self.db_id, f'm/{self.name}', 'event_out'))
 
         # Start after queryables are declared because it needs get_schemas
         self.data_broker.start_live_process()
@@ -277,7 +278,8 @@ class ModuleInterface(LoggerMixin):
             self.data_broker.stop_capturing()
             self.data_broker.close()
             self.module.command_stop_sampling()
-
+            if self.event_pub is not None:
+                self.cm.undeclare_publisher(self.event_pub)
             self.cm.close()
 
             # stop module

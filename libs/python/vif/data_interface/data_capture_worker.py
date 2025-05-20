@@ -32,27 +32,86 @@ class CaptureCommand:
     module_data_schemas: Optional[List] = None
 
 
-def _capture_proc(shutdown_ev: multiprocessing.synchronize.Event,
-                  process_ready_event: multiprocessing.synchronize.Event,
-                  data_capture_queue: multiprocessing.Queue,
-                  config_capture_queue: multiprocessing.Queue,
-                  module_name: str,
-                  module_type: str) -> None:
-    LoggerMixin.configure_logger(level=os.getenv('LOGLEVEL'))
-    logger = logging.getLogger('DataBroker.capture_proc')
-    logger.info('started capturing process for %s', module_name)
+class CaptureProcess(LoggerMixin, multiprocessing.Process):
+    def __init__(self, *args,
+                 shutdown_ev: multiprocessing.synchronize.Event,
+                 process_ready_event: multiprocessing.synchronize.Event,
+                 data_capture_queue: multiprocessing.Queue,
+                 config_capture_queue: multiprocessing.Queue,
+                 module_name: str,
+                 module_type: str,
+                 **kwargs):
+        super().__init__(*args, logger_name='DataBroker.capture_proc', **kwargs)
+        LoggerMixin.configure_logger(level=os.getenv('LOGLEVEL'))
+        self.shutdown_ev = shutdown_ev
+        self.process_ready_event = process_ready_event
+        self.data_capture_queue = data_capture_queue
+        self.config_capture_queue = config_capture_queue
+        self.module_name = module_name
+        self.module_type = module_type
 
-    signal.signal(signal.SIGINT, lambda signum, frame: (shutdown_ev.set(), log_reentrant(f'signal {signum} called')))
-    signal.signal(signal.SIGTERM, lambda signum, frame: (shutdown_ev.set(), log_reentrant(f'signal {signum} called')))
+    def run(self):
+        self.logger.info('started capturing process for %s', self.module_name)
 
-    thread_capture_kill_ev = threading.Event()
-    thread_capture: Optional[threading.Thread] = None
+        signal.signal(signal.SIGINT, lambda signum, frame: (self.shutdown_ev.set(),
+                                                            log_reentrant(f'signal {signum} called')))
+        signal.signal(signal.SIGTERM, lambda signum, frame: (self.shutdown_ev.set(),
+                                                             log_reentrant(f'signal {signum} called')))
 
-    # signal that process is ready
-    process_ready_event.set()
+        thread_capture_kill_ev = threading.Event()
+        thread_capture: Optional[threading.Thread] = None
 
-    def _capture_thread(measurement_name: str, measurement_dir: Path, module_data_schemas: List):
-        nonlocal process_ready_event, data_capture_queue, shutdown_ev, thread_capture_kill_ev
+        # signal that process is ready
+        self.process_ready_event.set()
+
+        # handle command queue
+        while not self.shutdown_ev.is_set():
+            try:
+                try:
+                    cap_cmd: CaptureCommand = self.config_capture_queue.get(timeout=0.2)
+                except queue.Empty:
+                    continue  # no data - check event and try again
+
+                self.logger.debug('got command %s', cap_cmd)
+
+                if cap_cmd.cmd == CaptureCommand.Command.STOP:
+                    self.logger.info('processing STOP')
+                    thread_capture_kill_ev.set()
+                    if thread_capture is not None:
+                        thread_capture.join()
+                        thread_capture = None
+                elif cap_cmd.cmd == CaptureCommand.Command.START:
+                    self.logger.info('processing START')
+                    assert thread_capture is None
+                    thread_capture = threading.Thread(target=self._capture_thread, name='capture_thread',
+                                                      args=[thread_capture_kill_ev,
+                                                            cap_cmd.measurement_name,
+                                                            cap_cmd.measurement_dir,
+                                                            cap_cmd.module_data_schemas])
+                    thread_capture_kill_ev.clear()
+                    thread_capture.start()
+                else:
+                    raise ValueError(f'unknown command: {cap_cmd.cmd.name}')
+
+                self.logger.debug('processed command: %s', cap_cmd.cmd.name)
+            except Exception as e:
+                self.logger.error(f'EX cap-command {type(e).__name__}: {e}\n{traceback.format_exc()}')
+
+        self.logger.info('cleaning up')
+        thread_capture_kill_ev.set()
+        if thread_capture is not None:
+            thread_capture.join()
+
+        self.process_ready_event.clear()
+        for q in [self.data_capture_queue, self.config_capture_queue]:
+            empty_queue(q)
+            q.close()
+
+        self.logger.info('finished capturing process for %s', self.module_name)
+        self.logger.debug(check_leftover_threads())
+
+    def _capture_thread(self, thread_capture_kill_ev: threading.Event, measurement_name: str, measurement_dir: Path,
+                        module_data_schemas: List):
         cap_logger = logging.getLogger('DataBroker.capture_thread')
         cap_logger.info('starting thread for %s', measurement_name)
         try:
@@ -60,7 +119,7 @@ def _capture_proc(shutdown_ev: multiprocessing.synchronize.Event,
             create_directory(Path(measurement_dir))
             # save as ".partXXXX.mcap" file and move when done
             temp_filename_ts = time.time_ns()
-            temp_filename = f'{module_name}.part{temp_filename_ts}.mcap'
+            temp_filename = f'{self.module_name}.part{temp_filename_ts}.mcap'
             mcap_file = open(measurement_dir / temp_filename, 'wb')
             json_channel_ids = []
 
@@ -69,26 +128,27 @@ def _capture_proc(shutdown_ev: multiprocessing.synchronize.Event,
             # create a schema for each in list
             for idx, s in enumerate(module_data_schemas):
                 new_schema = writer.register_schema(
-                    name=f'{module_type}_{idx}' if 'dtype_name' not in s else s['dtype_name'],
+                    name=f'{self.module_type}_{idx}' if 'dtype_name' not in s else s['dtype_name'],
                     encoding='jsonschema',
                     data=orjson.dumps(s))
                 cap_logger.info(f'new schema: {new_schema} with topic: '
-                                f'{module_type if "topic" not in s else s["topic"]}')
+                                f'{self.module_type if "topic" not in s else s["topic"]}')
                 json_channel_ids.append(writer.register_channel(
                     schema_id=new_schema,
-                    topic=module_name if 'topic' not in s else s['topic'],
+                    topic=self.module_name if 'topic' not in s else s['topic'],
                     message_encoding='json',
                 ))
         except Exception as _e:
             cap_logger.error(f'EX thread setup {type(_e).__name__}: {_e}\n{traceback.format_exc()}')
             return
 
-        process_ready_event.set()
+        # signal parent, that we are ready
+        self.process_ready_event.set()
 
         while not thread_capture_kill_ev.is_set():
             try:
                 try:
-                    raw = data_capture_queue.get(timeout=0.2)
+                    raw = self.data_capture_queue.get(timeout=0.2)
                 except queue.Empty:
                     continue  # no data - check event and try again
                 if raw is None:
@@ -123,57 +183,12 @@ def _capture_proc(shutdown_ev: multiprocessing.synchronize.Event,
         mcap_file.close()
         # rename partial file to .mcap when done
         # check if file already exists (previous crash and/or relaunch)
-        if Path(measurement_dir / f'{module_name}.mcap').exists():
-            cap_logger.warning('finished MCAP file already exists: %s.mcap', module_name)
-            os.rename(measurement_dir / temp_filename, measurement_dir / f'{module_name}.{temp_filename_ts}.mcap')
+        if Path(measurement_dir / f'{self.module_name}.mcap').exists():
+            cap_logger.warning('finished MCAP file already exists: %s.mcap', self.module_name)
+            os.rename(measurement_dir / temp_filename, measurement_dir / f'{self.module_name}.{temp_filename_ts}.mcap')
         else:
-            os.rename(measurement_dir / temp_filename, measurement_dir / f'{module_name}.mcap')
+            os.rename(measurement_dir / temp_filename, measurement_dir / f'{self.module_name}.mcap')
         cap_logger.info('finished capturing thread for %s', measurement_name)
-
-    # handle command queue
-    while not shutdown_ev.is_set():
-        try:
-            try:
-                cap_cmd: CaptureCommand = config_capture_queue.get(timeout=0.2)
-            except queue.Empty:
-                continue  # no data - check event and try again
-
-            logger.debug('got command %s', cap_cmd)
-
-            if cap_cmd.cmd == CaptureCommand.Command.STOP:
-                logger.info('processing STOP')
-                thread_capture_kill_ev.set()
-                if thread_capture is not None:
-                    thread_capture.join()
-                    thread_capture = None
-            elif cap_cmd.cmd == CaptureCommand.Command.START:
-                logger.info('processing START')
-                assert thread_capture is None
-                thread_capture = threading.Thread(target=_capture_thread, args=(
-                    cap_cmd.measurement_name,
-                    cap_cmd.measurement_dir,
-                    cap_cmd.module_data_schemas), name='capture_thread')
-                thread_capture_kill_ev.clear()
-                thread_capture.start()
-            else:
-                raise ValueError(f'unknown command: {cap_cmd.cmd.name}')
-
-            logger.debug('processed command: %s', cap_cmd.cmd.name)
-        except Exception as e:
-            logger.error(f'EX cap-command {type(e).__name__}: {e}\n{traceback.format_exc()}')
-
-    logger.info('cleaning up')
-    thread_capture_kill_ev.set()
-    if thread_capture is not None:
-        thread_capture.join()
-
-    process_ready_event.clear()
-    for q in [data_capture_queue, config_capture_queue]:
-        empty_queue(q)
-        q.close()
-
-    logger.info('finished capturing process for %s', module_name)
-    logger.debug(check_leftover_threads())
 
 
 class DataCaptureWorker(LoggerMixin):
@@ -191,14 +206,12 @@ class DataCaptureWorker(LoggerMixin):
         self._capture_queue: multiprocessing.Queue[Tuple[int, Dict, int]] = multiprocessing.Queue(maxsize=100000)
         self._capture_config_queue: multiprocessing.Queue[CaptureCommand] = multiprocessing.Queue(maxsize=4)
         self._capture_process_ready_event = multiprocessing.Event()
-        self._capture_proc = multiprocessing.Process(target=_capture_proc,
-                                                     kwargs={'shutdown_ev': child_shutdown_ev,
-                                                             'process_ready_event': self._capture_process_ready_event,
-                                                             'data_capture_queue': self._capture_queue,
-                                                             'config_capture_queue': self._capture_config_queue,
-                                                             'module_name': self.module_name,
-                                                             'module_type': self.module_type
-                                                             })
+        self._capture_proc = CaptureProcess(shutdown_ev=child_shutdown_ev,
+                                            process_ready_event=self._capture_process_ready_event,
+                                            data_capture_queue=self._capture_queue,
+                                            config_capture_queue=self._capture_config_queue,
+                                            module_name=self.module_name,
+                                            module_type=self.module_type)
 
     def get_module_data_dir(self, measurement_name: str) -> Path:
         return self.data_dir / measurement_name / self.module_name

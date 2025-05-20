@@ -1,4 +1,9 @@
+import logging
+
 import zmq
+
+logging.basicConfig(format='%(asctime)s  %(message)s', level=logging.DEBUG)
+
 
 sock_sub = zmq.Context().socket(zmq.SUB)
 sock_sub.setsockopt(zmq.LINGER, 0)
@@ -7,15 +12,15 @@ sock_sub.setsockopt(zmq.SNDHWM, 100000)
 sock_sub.connect(f"tcp://localhost:5558")
 sock_sub.subscribe("")
 
-print('ready')
+logging.info('ready')
 
 try:
     while True:
         try:
             topic, msg = sock_sub.recv_multipart()
-            print(f'{topic.decode()}:{msg.decode()}')
+            logging.info(f'{topic.decode()}:{msg.decode()}')
         except Exception as e:
-            print(f'EX ({topic} | {msg}): {type(e).__name__}: {e}')
+            logging.error(f'EX ({topic} | {msg}): {type(e).__name__}: {e}')
 except KeyboardInterrupt:
     pass
 

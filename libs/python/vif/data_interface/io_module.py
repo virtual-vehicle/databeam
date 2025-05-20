@@ -53,7 +53,7 @@ class IOModule(LoggerMixin):
         :param cfg_key: Contains the event name
         :return: None
         """
-        pass
+        self.logger.warning(f'unhandled config event: {cfg_key}')
 
     def command_state_change(self, command: StartStopCmd, related_state: MeasurementStateType) -> None:
         """

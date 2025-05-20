@@ -93,7 +93,7 @@ class RouterConnection(LoggerMixin):
         """
 
         """
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, logger_name=f'RouterConnection {db_id}', **kwargs)
 
         self.logger.info('initializing session with db_id "%s", node_name "%s", router "%s"',
                          db_id, node_name, router_hostname)
@@ -106,14 +106,11 @@ class RouterConnection(LoggerMixin):
         self._shutdown_ev = threading.Event()
 
         # sockets
-        self._pub_sock_lock = threading.Lock()
-        self._pub_sock = create_connect(f'tcp://{self._router_hostname}:{self._ports.DB_ROUTER_SUB_PORT}', zmq,
-                                        zmq.PUB)
-
         if len(self._node_name) > 0 and max_parallel_req > 0:
             ident_key = Key(self._db_id, self._node_name, topic='-')
             self._query_req_socks = queue.Queue()
             for i in range(max_parallel_req):
+                self.logger.debug('creating query request socket id: %s%d', ident_key.ident, i)
                 self._query_req_socks.put(create_connect(f'tcp://{self._router_hostname}:'
                                                          f'{self._ports.DB_ROUTER_FRONTEND_PORT}',
                                                          zmq, zmq.DEALER, identity=f'{ident_key.ident}{i}'.encode(),
@@ -122,6 +119,11 @@ class RouterConnection(LoggerMixin):
             self.logger.debug('node_name not specified: disabled queryables and queries')
             # external routers do not support queries
             self._query_req_socks = None
+
+        # one PUB socket per topic added by "declare_publisher"
+        self._pub_sockets_lock = threading.Lock()
+        # key (topic): lock, pub-socket, list of declaration-uuids
+        self._pub_sockets: Dict[str, Tuple[threading.Lock, zmq.Socket, List[int]]] = {}
 
         self._subscribers_lock = threading.Lock()
         # key (topic): list of uuids (int) and callbacks
@@ -151,8 +153,13 @@ class RouterConnection(LoggerMixin):
         if self._queryable_thread is not None:
             self._queryable_thread.join()
         self._subscribe_thread.join()
-        with self._pub_sock_lock:
-            self._pub_sock.close()
+        with self._pub_sockets_lock:
+            for key, pub_sock_info in self._pub_sockets.items():
+                pub_sock_lock, pub_sock, _ = pub_sock_info
+                self.logger.warning('closing abandoned publisher socket %s', key)
+                with pub_sock_lock:
+                    pub_sock.close()
+            self._pub_sockets.clear()
         if self._query_req_socks is not None:
             while not self._query_req_socks.empty():
                 sock = self._query_req_socks.get()
@@ -331,7 +338,10 @@ class RouterConnection(LoggerMixin):
                 topic = topic_bytes.decode()
                 # logger.debug('rx: %s', rx_msg)
                 with self._subscribers_lock:
-                    cb_list = [cb[1] for cb in self._subscribers.get(topic)]
+                    sub_callbacks = self._subscribers.get(topic)
+                    if sub_callbacks is None:
+                        continue
+                    cb_list = [cb[1] for cb in sub_callbacks]
                 # execute callbacks outside of lock
                 for cb in cb_list:
                     cb(topic, rx_msg)
@@ -383,6 +393,57 @@ class RouterConnection(LoggerMixin):
         except Exception as e:
             self.logger.error(f'EX unsubscribe ({type(e).__name__}): {e}\n{traceback.format_exc()}')
 
+    def declare_publisher(self, key: Key) -> Optional[int]:
+        try:
+            pub_id = uuid.uuid4().int
+            with self._pub_sockets_lock:
+                if str(key) not in self._pub_sockets:
+                    self.logger.debug('adding new publisher %s: id %d', str(key), pub_id)
+                    pub_sock_lock = threading.Lock()
+                    pub_sock = create_connect(f'tcp://{self._router_hostname}:{self._ports.DB_ROUTER_SUB_PORT}', zmq,
+                                              zmq.PUB)
+                    self._pub_sockets[str(key)] = (pub_sock_lock, pub_sock, [pub_id])
+                else:
+                    self.logger.debug('adding publisher id %d to existing topic %s', pub_id, str(key))
+                    self._pub_sockets[str(key)][2].append(pub_id)
+        except Exception as e:
+            self.logger.error(f'EX declare_publisher ({str(key)}) {type(e).__name__}: {e}\n{traceback.format_exc()}')
+            return None
+        return pub_id
+
+    def undeclare_publisher(self, pub_id: int) -> bool:
+        """
+        Undeclares a publisher identified by its `pub_id`. This method searches within the
+        publisher sockets, removes the specified `pub_id`, and if no identifiers are left
+        for a particular socket, closes and removes it.
+
+        :param pub_id: The unique id of the publisher to undeclare.
+        :return: A boolean indicating whether the publisher was found and successfully undeclared.
+        """
+        found = False
+        try:
+            if pub_id is None:
+                raise ValueError('pub_id must not be None')
+            with self._pub_sockets_lock:
+                remove_key = None
+                for key, pub_sock_info in self._pub_sockets.items():
+                    pub_sock_lock, pub_sock, pub_id_list = pub_sock_info
+                    if pub_id in pub_id_list:
+                        found = True
+                        pub_id_list.remove(pub_id)
+                        if len(pub_id_list) == 0:
+                            # remove publisher if noone needs it anymore
+                            remove_key = key
+                        break
+                if remove_key is not None:
+                    self.logger.debug('undeclaring publisher %s with id %d', remove_key, pub_id)
+                    pub_sock_lock, pub_sock, pub_id_list = self._pub_sockets.pop(remove_key)
+                    with pub_sock_lock:
+                        pub_sock.close()
+        except Exception as e:
+            self.logger.error(f'EX undeclare_publisher ({pub_id}) {type(e).__name__}: {e}\n{traceback.format_exc()}')
+        return found
+
     def publish(self, key: Key, data: bytes | str) -> None:
         try:
             if isinstance(data, str):
@@ -390,8 +451,9 @@ class RouterConnection(LoggerMixin):
             else:
                 data_bytes = data
 
-            with self._pub_sock_lock:
-                self._pub_sock.send_multipart([key.encode(), data_bytes])
+            pub_sock_lock, pub_sock, _ = self._pub_sockets[str(key)]
+            with pub_sock_lock:
+                pub_sock.send_multipart([key.encode(), data_bytes])
         except Exception as e:
             self.logger.error(f'EX publish {key} ({type(e).__name__}): {e}\n{traceback.format_exc()}')
 
@@ -401,12 +463,12 @@ class ConnectionManager(LoggerMixin):
                  shutdown_event: Optional[threading.Event] = None, max_parallel_req: int = 1,
                  max_parallel_queryables: int = 1, **kwargs):
         """
-        @param router_hostname: hostname of router
-        @param db_id: databeam ID
-        @param node_name: identifier of process
-        @param shutdown_event: shutdown event
-        @param max_parallel_req: maximum number of parallel requests
-        @param max_parallel_queryables: maximum number of parallel queryable workers
+        :param router_hostname: hostname of router
+        :param db_id: databeam ID
+        :param node_name: identifier of process
+        :param shutdown_event: shutdown event
+        :param max_parallel_req: maximum number of parallel requests
+        :param max_parallel_queryables: maximum number of parallel queryable workers
         """
         super().__init__(*args, **kwargs)
 
@@ -508,7 +570,7 @@ class ConnectionManager(LoggerMixin):
         self.logger.debug('registering subscriber %s', key)
         with self._router_connections_lock:
             if key.db_id not in self._router_connections:
-                self._add_external_router_connection(key.db_id)  # TODO (for all "adds"): raise s/t useful if it fails
+                self._add_external_router_connection(key.db_id)
             return self._router_connections[key.db_id].subscribe(key, cb)
 
     def unsubscribe(self, sub_id: int) -> None:
@@ -519,10 +581,21 @@ class ConnectionManager(LoggerMixin):
                 nc.unsubscribe(sub_id)
 
     def declare_publisher(self, key: Key) -> int:
-        return 0
+        assert self.initialized, 'connection manager not initialized'
+        with self._router_connections_lock:
+            if key.db_id not in self._router_connections:
+                self._add_external_router_connection(key.db_id)
+        return self._router_connections[key.db_id].declare_publisher(key)
 
     def undeclare_publisher(self, pub_id: int) -> None:
-        pass
+        assert self.initialized, 'connection manager not initialized'
+        found = False
+        with self._router_connections_lock:
+            for nc in self._router_connections.values():
+                if nc.undeclare_publisher(pub_id):
+                    found = True
+        if not found:
+            self.logger.warning('undeclare_publisher: no connection found for id %d', pub_id)
 
     def publish(self, key: Key, data: bytes | str) -> None:
         assert self.initialized, 'connection manager not initialized'
