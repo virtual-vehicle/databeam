@@ -5,7 +5,8 @@ ifneq (,$(wildcard ./.env))
     export
 endif
 
-# PLATFORM ?= linux/amd64,linux/arm64  # TODO: removed arm support for now
+# default platform:
+# PLATFORM ?= linux/amd64,linux/arm64
 PLATFORM ?= linux/amd64
 MODE ?= push
 DOCKER_REGISTRY ?= docker.io
@@ -43,6 +44,7 @@ help: ## This help
 	@printf "general options (can be combined)\n"
 	@printf '%b\n' "make xxx \033[1mNOCACHE=1\033[0m  -->  do not use caching"
 	@printf '%b\n' "make xxx \033[1mVERSION=projectXY\033[0m  -->  set custom version tag"
+	@printf '%b\n' "make xxx \033[1mPLATFORM=linux/amd64,linux/arm64\033[0m  -->  set custom platform(s)"
 	@printf '%b\n' "make xxx \033[1mBUILD_LOCAL=1\033[0m  -->  build for local machine only"
 	@printf '%b\n' "make xxx \033[1mBUILD_TAR=1 PLATFORM=linux/amd64\033[0m  -->  output will be a tarball for amd64 or arm64 (specify!)"
 	@printf '%b\n' "make xxx \033[1mBUILD_TAR=1 TARGET=user@host SSHPORT=22\033[0m  -->  tarball will be uploaded to target via scp"
@@ -82,7 +84,7 @@ endef
 # # --- docker build ---
 define buildx_base
 	$(call clean_base_images)
-	deploy/scripts/buildx.sh $(IMG_BASE)_$(1) deploy/docker-base-images/Dockerfile.$(1) $(PLATFORM) $(MODE) --build-arg IMAGE=$(2)
+	deploy/scripts/buildx.sh $(IMG_BASE)_$(1) deploy/docker-base-images/Dockerfile.$(1) linux/amd64,linux/arm64 $(MODE) --build-arg IMAGE=$(2)
 endef
 
 # build function
@@ -95,11 +97,6 @@ endef
 run:  ## Run Databeam stack locally (docker compose up)
 	bash -c "trap - EXIT; docker compose --project-name databeam up --remove-orphans --force-recreate --renew-anon-volumes"
 
-.PHONY: pull-images
-pull-images:
-	docker pull $(IMG_UBUNTU)
-	@printf "\n"
-
 .PHONY: develop
 develop:  ## Prepare development environment
 	./deploy/scripts/developer_init.sh
@@ -110,7 +107,7 @@ _prompt:
 	@printf "[$(shell date '+%Y-%m-%d-%H:%M:%S')] - start\n\n"
 
 .PHONY: update
-update: _prompt pull-images base-all  ## Update dependencies and build base- / run-images
+update: _prompt base-all  ## Update dependencies and build base- / run-images
 # delete local base images (make sure they are not used)
 	$(call clean_base_images)
 	@printf "[$(shell date '+%Y-%m-%d-%H:%M:%S')] - finished\n"

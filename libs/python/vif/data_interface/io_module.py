@@ -3,6 +3,7 @@ from typing import List, Dict, Union, Optional
 from vif.logger.logger import LoggerMixin
 from vif.data_interface.config_handler import ConfigHandler
 from vif.data_interface.data_broker import DataBroker
+from vif.data_interface.module_meta_factory import ModuleMetaFactory
 
 from vif.data_interface.network_messages import Status, IOEvent, MeasurementStateType, MeasurementInfo, StartStopCmd
 
@@ -117,16 +118,16 @@ class IOModule(LoggerMixin):
         module_schemas = self.command_get_schemas()
         module_meta = self.command_get_meta_data()
         topics: List[str] = [self.name if 'topic' not in s else s['topic'] for s in module_schemas]
-        module_meta['mcap_topics'] = topics
-        return module_meta
+        module_meta.add_mcap_topics(topics)
+        return module_meta.get_meta_dict()
 
-    def command_get_meta_data(self) -> Dict[str, Union[str, int, float, bool, List[str]]]:
+    def command_get_meta_data(self) -> ModuleMetaFactory:
         """
         Called by module interface when the module is queried for meta-data.
         Return any relevant information about the device, channel units etc.
         :return: Flat dict with meta-data key-values
         """
-        return {}
+        return ModuleMetaFactory()
 
     def command_get_schemas(self) -> List[Dict]:
         """

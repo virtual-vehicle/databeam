@@ -16,6 +16,11 @@ class Plot
 
   }
 
+  plot_video_stream(video_stream_url)
+  {
+
+  }
+
   plot_spectrum(data)
   {
     

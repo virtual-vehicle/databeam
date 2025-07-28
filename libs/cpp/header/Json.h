@@ -21,7 +21,7 @@ public:
     std::string getString(std::string key);
 
     //getters for data types
-    bool getBool(std::string key);
+    bool getBool(std::string key, bool default_value=false);
     int getInt(std::string key);
     unsigned int getUnsignedInt(std::string key);
     int64_t getInt64(std::string key);
@@ -29,7 +29,7 @@ public:
     float getFloat(std::string key);
     double getDouble(std::string key);
 
-    bool getNestedBool(std::string key);
+    bool getNestedBool(std::string key, bool default_value=false);
     float getNestedFloat(std::string key);
     std::string getNestedString(std::string key);
 

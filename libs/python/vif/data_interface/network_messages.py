@@ -235,8 +235,12 @@ class ModuleDataConfigCmd(IntEnum):
 
 
 class ModuleDataConfig:
-    def __init__(self, enable_capturing: bool = False, enable_live_all_samples: bool = False,
+    def __init__(self, capturing_available: bool = True, live_available: bool = True,
+                 enable_capturing: bool = False, enable_live_all_samples: bool = False,
                  enable_live_fixed_rate: bool = False, live_rate_hz: float = 1.0):
+        self.capturing_available: bool = capturing_available
+        self.live_available: bool = live_available
+
         self.enable_capturing: bool = enable_capturing
         self.enable_live_all_samples: bool = enable_live_all_samples
         self.enable_live_fixed_rate: bool = enable_live_fixed_rate
@@ -250,13 +254,16 @@ class ModuleDataConfig:
 
     @classmethod
     def from_dict(cls, data) -> Self:
-        return cls(data['enable_capturing'], data['enable_live_all_samples'],
-                   data['enable_live_fixed_rate'], data['live_rate_hz'])
+        return cls(data['capturing_available'],
+                   data['live_available'],
+                   data['enable_capturing'],
+                   data['enable_live_all_samples'],
+                   data['enable_live_fixed_rate'],
+                   data['live_rate_hz'])
 
     @classmethod
     def deserialize(cls, json_str: Union[str, bytes]) -> Self:
         return cls.from_dict(json.loads(json_str))
-
 
 class ModuleDataConfigQuery:
     def __init__(self, cmd: ModuleDataConfigCmd, module_data_config: ModuleDataConfig = ModuleDataConfig()):
@@ -322,6 +329,19 @@ class ModuleConfigEventReply(Reply):
     def deserialize(cls, json_str: Union[str, bytes]) -> Self:
         data = json.loads(json_str)
         return cls(Status.from_dict(data['status']))
+
+
+class ModuleLatestQuery:
+    def __init__(self, schema_index: int = 0):
+        self.schema_index = schema_index if schema_index >= 0 else 0
+
+    def serialize(self) -> str:
+        return json.dumps({'schema_index': self.schema_index})
+
+    @classmethod
+    def deserialize(cls, json_str: Union[str, bytes]) -> Self:
+        data = json.loads(json_str)
+        return cls(data['schema_index'])
 
 
 class DocumentationReply(Reply):

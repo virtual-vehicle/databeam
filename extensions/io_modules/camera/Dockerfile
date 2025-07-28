@@ -24,7 +24,7 @@ FROM ${DEPLOY_IMAGE} AS deploy-image
 ARG MODULE_NAME=camera
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3-opencv ffmpeg libsm6 libxext6
+    && apt-get install -y --no-install-recommends python3-opencv ffmpeg libsm6 libxext6 gpac
 
 COPY --from=build-image /opt/venv /opt/venv
 COPY --from=build-image /usr/local/bin/mp4fpsmod /usr/local/bin/mp4fpsmod

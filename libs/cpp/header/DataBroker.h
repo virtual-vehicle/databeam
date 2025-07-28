@@ -39,7 +39,7 @@ public:
     bool getSamplingRunning();
     void setSchemas(std::vector<McapSchema>& schema_list);
 
-    std::string getLatestData();
+    std::string getLatestData(unsigned int schema_index);
     AsyncQueue<LiveDataBlock>* getAllQueue();
     AsyncQueue<LiveDataBlock>* getFixedQueue();
     Logger* getLogger();
@@ -65,7 +65,7 @@ private:
     std::vector<mcap::ChannelId> channel_ids;
     uint32_t frame_index = 0;
     std::mutex broker_lock;
-    JsonWriter latest_json_writer;
+    std::vector<JsonWriter> latest_json_writers;
     JsonWriter live_json_writer;
     bool mcap_open = false;
     bool capture_running = false;

@@ -14,7 +14,7 @@ from vif.data_interface.io_module import IOModule
 from vif.data_interface.network_messages import Status, StartStop, StartStopCmd, StartStopReply
 from vif.data_interface.connection_manager import Key
 
-from io_modules.autostart.config import AutoStartConfig
+from system.autostart.config import AutoStartConfig
 
 
 @environ.config(prefix='')
@@ -38,6 +38,9 @@ class AutoStart(IOModule):
         self._thread_handling_lock = threading.Lock()
         self._worker_thread: Optional[threading.Thread] = None
         self._thread_stop_event = threading.Event()
+
+        self.data_broker.capabilities.capture_data = False
+        self.data_broker.capabilities.live_data = False
 
     def stop(self):
         self._stop_thread()

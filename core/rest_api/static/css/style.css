@@ -581,6 +581,33 @@ hr{
   flex-direction: column;
 }
 
+.cfg-object{
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cfg-array {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  column-gap: 10px;
+  row-gap: 8px;
+  padding-left: 10px;
+}
+
+.cfg-array-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+}
+
+.cfg-array-label{
+  display: block;
+  font-size: 10pt;
+}
+
 .config-container {
   resize: none;
   height: 100%;
@@ -601,6 +628,16 @@ hr{
   flex: 1 1 200px;
   overflow-y: auto;
   padding-right: 10px;
+}
+
+.module-doc-div p {
+  margin: 0px;
+  margin-bottom: 15px;
+}
+
+.module-doc-div ul {
+  margin: 0px;
+  margin-bottom: 15px;
 }
 
 .hidden-element {
@@ -663,10 +700,6 @@ hr{
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-top: 3px;
-  margin-right: 3px;
-  margin-left: 3px;
-  font-size: 16px;
   background-color: var(--btn_bg_color);
   color: var(--btn_font_color);
   border: none;
@@ -719,6 +752,16 @@ hr{
   flex-direction: row;                   
   justify-content: space-evenly; 
   align-items: center;
+}
+
+.cfg-array-buttons {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-evenly;
+  align-items: center;
+  margin-top: 10px;
+  margin-left: 10px;
+  gap: 10px;
 }
 
 .config-header-row {
@@ -1023,7 +1066,29 @@ select {
 }
 
 .emoji-button:hover {
-  transform: scale(1.2)
+  transform: scale(1.2);
+}
+
+.module-buttons-div {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.emoji-button-div {
+  background: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.emoji-button-label {
+  background: none;
+  font-size: 10pt;
 }
 
 .alert-emoji-button {
@@ -1110,6 +1175,12 @@ input[type=number] {
   box-sizing: border-box;
   font-size: 14px;
   box-shadow: var(--form_shadow);
+}
+
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 /* Firefox */

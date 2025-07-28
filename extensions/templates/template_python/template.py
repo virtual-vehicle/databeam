@@ -11,6 +11,7 @@ import environ
 
 from vif.data_interface.module_interface import main
 from vif.data_interface.io_module import IOModule
+from vif.data_interface.module_meta_factory import ModuleMetaFactory
 from vif.asyncio_helpers.asyncio_helpers import tick_generator
 from vif.data_interface.network_messages import Status, IOEvent
 
@@ -147,8 +148,9 @@ class Template(IOModule):  # TODO adopt module name
     def command_stop_capturing(self) -> None:
         pass
 
-    def command_get_meta_data(self) -> Dict[str, Union[str, int, float, bool]]:
-        return {}
+    def command_get_meta_data(self) -> ModuleMetaFactory:
+        meta_cfg = ModuleMetaFactory()
+        return meta_cfg
 
     def command_get_schemas(self) -> List[Dict]:
         return [{
@@ -161,8 +163,6 @@ class Template(IOModule):  # TODO adopt module name
 
     def event_received(self, io_event: IOEvent) -> None:
         self.logger.debug('event received: %s', io_event.json_data)
-
-    # unused class methods may be deleted - see io_module.py for default implementations
 
 
 if __name__ == '__main__':

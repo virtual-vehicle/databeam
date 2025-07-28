@@ -39,6 +39,7 @@ from vif.plot_juggler.plot_juggler_writer import PlotJugglerWriter
 
 from meta_handler import MetaHandler
 from job_server import JobServer
+from mcap_recover import recover_unfinalized_mcaps, fix_unfinished_measurements_meta
 
 
 @environ.config(prefix='')
@@ -159,6 +160,10 @@ class Controller(LoggerMixin):
         Starts up the controller by setting up publishers for capturing/sampling and by
         registering callbacks for all receivable queries.
         """
+        self.logger.info('searching data directory for unfinished measurements')
+        recover_unfinalized_mcaps(self._data_dir)
+        fix_unfinished_measurements_meta(self._data_dir)
+
         self.logger.info('starting controller')
         try:
             self._job_server.start()
@@ -199,12 +204,14 @@ class Controller(LoggerMixin):
         self._shutdown_event.set()
 
         # stop watchdog
-        self._registry_watchdog.join()
-        self.logger.debug('watchdog joined')
+        if self._registry_watchdog.is_alive():
+            self._registry_watchdog.join()
+            self.logger.debug('watchdog joined')
 
         # stop async cmd thread
-        self._async_cmd_thread.join()
-        self.logger.debug('async_cmd_thread joined')
+        if self._async_cmd_thread.is_alive():
+            self._async_cmd_thread.join()
+            self.logger.debug('async_cmd_thread joined')
 
         # stop running measurement (if running)
         if self._state.state == MeasurementStateType.CAPTURING:
@@ -853,7 +860,7 @@ if __name__ == '__main__':
             pass
 
     # ignore child signal
-    signal.signal(signal.SIGCHLD, lambda signum, frame: log_reentrant(f'ignoring signal {signum}'))
+    signal.signal(signal.SIGCHLD, signal.SIG_DFL)
 
     # handle shutdown signals
     shutdown_evt = threading.Event()

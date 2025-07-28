@@ -10,6 +10,7 @@ import environ
 
 from vif.data_interface.module_interface import main
 from vif.data_interface.io_module import IOModule
+from vif.data_interface.module_meta_factory import ModuleMetaFactory
 from vif.asyncio_helpers.asyncio_helpers import tick_generator
 
 from io_modules.constant_publisher.config import ConstantPublisherConfig
@@ -158,11 +159,11 @@ class ConstantPublisher(IOModule):
     def command_stop_sampling(self):
         self._stop_thread()
 
-    def command_get_meta_data(self) -> Dict[str, Union[str, int, float, bool]]:
-        meta = {}
+    def command_get_meta_data(self) -> ModuleMetaFactory:
+        meta = ModuleMetaFactory()
         for d_type, x in self.constant_data.items():
             for k, v in x.items():
-                meta[f'{k}_{d_type}'] = v
+                meta.add(f'{k}_{d_type}', v)
         return meta
 
     def command_get_schemas(self) -> List[Dict]:

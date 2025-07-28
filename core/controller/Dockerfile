@@ -11,6 +11,14 @@ RUN pip install -r requirements_core.txt -r requirements.txt
 FROM ${DEPLOY_IMAGE} AS deploy-image
 
 COPY --from=build-image /opt/venv /opt/venv
+RUN apt-get update && apt-get install -y --no-install-recommends jq curl
+
+# install mcap CLI
+RUN PARCH="$(dpkg --print-architecture)"; \
+    DOWNLOAD_URL=$(curl -s https://api.github.com/repos/foxglove/mcap/releases \
+    | jq -r '[.[] | select(.tag_name | startswith("releases/mcap-cli/"))][0].assets[] | select(.name == "'mcap-linux-${PARCH}'") | .browser_download_url') \
+    && curl -L "$DOWNLOAD_URL" -o /usr/local/bin/mcap \
+    && chmod +x /usr/local/bin/mcap
 
 # copy python dependencies
 COPY libs/python/vif/logger /python/libs/vif/logger

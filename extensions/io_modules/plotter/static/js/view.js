@@ -54,6 +54,10 @@ class View
       }
     });
 
+    document.addEventListener('visibilitychange', () => {
+      this.model.setTabVisible(!document.hidden)
+    });
+
     //holds all plot windows
     this.plot_windows = []
   }
@@ -507,13 +511,24 @@ class View
 
     let live_data_types = ["All", "Fixed"]
 
+    let module_name_list = []
+
+    // create live data source select fields
     for(let i = 0; i < modules.length; i++)
     {
-      let header = document.createElement("h2")
-      header.innerHTML = modules[i].getName()
+      if(modules[i].isVideoStream()) continue;
 
+      if(module_name_list.includes(modules[i].getModuleName())) continue;
+      module_name_list.push(modules[i].getModuleName())
+
+      //create header
+      let header = document.createElement("h2")
+      header.innerHTML = modules[i].getModuleName()
+
+      //create select
       let select = document.createElement("select")
       
+      //create options
       for(let k = 0; k < live_data_types.length; k++)
       {
         let option = document.createElement("option");
@@ -523,11 +538,12 @@ class View
         select.add(option);
       }
 
-      select.addEventListener("change", event => this.onModuleLiveSourceChanged(event, modules[i].getName()), true);
+      // register select change callback
+      select.addEventListener("change", event => this.onModuleLiveSourceChanged(event, modules[i].getModuleName()), true);
 
+      //create div row and append
       let module_select_div = document.createElement("div")
       module_select_div.setAttribute("class", "live-data-row")
-
       module_select_div.appendChild(header)
       module_select_div.appendChild(select)
       live_data_div.appendChild(module_select_div)
@@ -564,6 +580,11 @@ class View
     {
       let m = this.plot_windows[i].getSelectedModule()
       if(m == "") continue
+
+      let module = this.model.getModuleByName(m)
+
+      if(module.isVideoStream()) continue
+
       if(!requested_modules.includes(m)) requested_modules.push(m)
     }
 

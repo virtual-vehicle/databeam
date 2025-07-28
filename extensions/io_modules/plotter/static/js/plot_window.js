@@ -37,7 +37,7 @@ class PlotWindow
 
     //create plot type select
     this.plot_select = document.createElement("select")
-    this.plot_types = ["Table", "Line", "Image", "Spectrum", "Oscilloscope", "Map"]
+    this.plot_types = ["Table", "Line", "Image", "Spectrum", "Oscilloscope", "Map", "Video Stream"]
 
     for(let i = 0; i < this.plot_types.length; i++)
     {
@@ -110,6 +110,7 @@ class PlotWindow
     if(default_plot_type == "Spectrum") this.current_plot = new SpectrumPlot(this.plot_div, this.legend_div, this.options_div, plot_options)
     if(default_plot_type == "Oscilloscope") this.current_plot = new OscilloscopePlot(this.plot_div, this.legend_div, this.options_div, plot_options)
     if(default_plot_type == "Map") this.current_plot = new MapPlot(this.plot_div, this.legend_div, this.options_div, plot_options)
+    if(default_plot_type == "Video Stream") this.current_plot = new VideoStreamPlot(this.plot_div, this.legend_div, this.options_div, plot_options)
     this.createOptions()
     this.current_plot.bindOptionsChangedCB(() => this.onPlotOptionsChanged())
 
@@ -253,6 +254,7 @@ class PlotWindow
     if(this.plot_type == "Spectrum") this.current_plot = new SpectrumPlot(this.plot_div, this.legend_div, this.options_div, {})
     if(this.plot_type == "Oscilloscope") this.current_plot = new OscilloscopePlot(this.plot_div, this.legend_div, this.options_div, {})
     if(this.plot_type == "Map") this.current_plot = new MapPlot(this.plot_div, this.legend_div, this.options_div, {})
+    if(this.plot_type == "Video Stream") this.current_plot = new VideoStreamPlot(this.plot_div, this.legend_div, this.options_div, {})
     this.current_plot.set_module_meta(this.model.getModuleMeta(this.selected_module))
     this.createOptions()
     this.current_plot.bindOptionsChangedCB(() => this.onPlotOptionsChanged())
@@ -262,6 +264,9 @@ class PlotWindow
 
     //update config
     this.view.onConfigUpdated()
+
+    //update plot for constant data (such as video stream url)
+    this.plot_constant_data()
   }
 
   //create resize observer for plot
@@ -403,6 +408,9 @@ class PlotWindow
 
     //update plot options
     this.createOptions()
+
+    //update plot for constant data (such as video stream url)
+    this.plot_constant_data()
   }
 
   onModuleSelectionChanged(event)
@@ -429,6 +437,30 @@ class PlotWindow
 
     //update config
     this.view.onConfigUpdated()
+
+    //update plot for constant data (such as video stream url)
+    this.plot_constant_data()
+  }
+
+  plot_constant_data()
+  {
+    if(this.selected_module == "") return
+
+    //get module
+    let module = this.model.getModuleByName(this.selected_module)
+
+    //set video stream url
+    if(module != undefined)
+    {
+      if(module.isVideoStream()) 
+      {
+        this.current_plot.plot_video_stream(module.getVideoStreamURL())
+      }
+      else
+      {
+        this.current_plot.plot_video_stream("")
+      }
+    }
   }
 
   reset()

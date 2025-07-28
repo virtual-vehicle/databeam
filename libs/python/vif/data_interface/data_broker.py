@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 from functools import lru_cache
-from typing import Optional, Dict, Tuple, List
+from typing import Optional, Dict, Tuple, List, Union
 
 from vif.logger.logger import LoggerMixin
 from vif.data_interface.network_messages import ModuleDataConfig
@@ -29,7 +29,7 @@ class DataBroker(LoggerMixin):
 
         # replace the following characters in channel names for mcap compatibility
         self._replace_name_chars_re = re.compile(r'[^a-zA-Z0-9_-]')
-        self._latest_data: Optional[Tuple[int, Dict]] = None
+        self._latest_data_list: List[Tuple[int, Union[Dict, None]]] = []
 
         self._possible_schema_change_event = multiprocessing.Event()
 
@@ -90,7 +90,10 @@ class DataBroker(LoggerMixin):
 
         # store data as latest data if flag is set
         if latest:
-            self._latest_data = (time_ns, data)
+            while len(self._latest_data_list) <= min(schema_index, 20):
+                self._latest_data_list.append((0, None))
+
+            self._latest_data_list[schema_index] = (time_ns, data)
 
         # pass data to worker processes for mcap-writing
         if self.data_capture_worker.is_active() and mcap:
@@ -100,11 +103,11 @@ class DataBroker(LoggerMixin):
         if self.data_live_forwarder.is_active() and live:
             self.data_live_forwarder.forward_data(time_ns, schema_index, data)
 
-    def get_latest(self) -> Tuple[int, Optional[Dict]]:
-        if self._latest_data is None:
-            return 0, None
+    def get_latest(self, schema_index: int = 0) -> Tuple[int, Optional[Dict]]:
+        if schema_index < len(self._latest_data_list):
+            return self._latest_data_list[schema_index]
 
-        return self._latest_data[0], self._latest_data[1].copy()
+        return 0, None
 
     def close(self):
         # stop capturing / live data inputs

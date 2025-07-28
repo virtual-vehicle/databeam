@@ -35,15 +35,6 @@ class StartStopForwarder(IOModule):
 
         self.followers_db_ids = []
 
-    def start(self):
-        self.logger.debug('starting')
-
-    def stop(self):
-        self.logger.info('module closed')
-
-    def command_validate_config(self, config: Dict) -> Status:
-        return Status(error=False)
-
     def _prepare_connections_worker(self):
         logger = logging.getLogger('prepare_connections')
         # add external router connections by pinging once
@@ -69,11 +60,12 @@ class StartStopForwarder(IOModule):
             known_db_ids = self.module_interface.cm.get_external_databeam_ids()
             # verify that all configured DBIDs are actually registered.
             # send warning for unconfigured and remove from list
-            for dbid in config['follower_db_ids']:
-                if dbid not in known_db_ids:
-                    self.module_interface.log_gui('unknown follower DBID: ' + dbid, logging.WARNING)
-                else:
-                    self.followers_db_ids.append(dbid)
+            if config['enable']:
+                for dbid in config['follower_db_ids']:
+                    if dbid not in known_db_ids:
+                        self.module_interface.log_gui('unknown follower DBID: ' + dbid, logging.WARNING)
+                    else:
+                        self.followers_db_ids.append(dbid)
 
             # do not wait for router-connection-preparation - might take a few 100 ms
             threading.Thread(target=self._prepare_connections_worker, daemon=True).start()

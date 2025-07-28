@@ -51,6 +51,9 @@ scp $SCRIPT_DIR/../../.env ${TARGET_USERNAME}@${TARGET_HOSTNAME}:$DEPLOY_DIR/..
 scp $SCRIPT_DIR/../../docker-compose.yml ${TARGET_USERNAME}@${TARGET_HOSTNAME}:$DEPLOY_DIR/..
 scp -r $SCRIPT_DIR/../compose-files ${TARGET_USERNAME}@${TARGET_HOSTNAME}:$DEPLOY_DIR/
 
+printf '\n***** installing golang-go compiler:\n'
+sudo apt-get install -y golang-go
+
 printf '\n***** compiling host-command-helper daemon (golang):\n'
 TARCH=$(ssh -n ${TARGET_USERNAME}@${TARGET_HOSTNAME} "uname -m")
 if [ $TARCH == "aarch64" ]; then

@@ -20,6 +20,16 @@ void DataConfig::init(std::string module_data_config_file)
     readFromFile();
 }
 
+bool DataConfig::getCapturingAvailable()
+{
+    return capturing_available;
+}
+
+bool DataConfig::getLiveAvailable()
+{
+    return live_available;
+}
+
 bool DataConfig::getAllEnabled()
 {
     return enable_live_all_samples;
@@ -42,6 +52,8 @@ double DataConfig::getFixedDeltaTime()
 
 void DataConfig::store(ModuleDataConfigQuery* data_config_query)
 {
+    capturing_available = data_config_query->module_data_config.capturing_available;
+    live_available = data_config_query->module_data_config.live_available;
     enable_capturing = data_config_query->module_data_config.enable_capturing;
     enable_live_all_samples = data_config_query->module_data_config.enable_live_all_samples;
     enable_live_fixed_rate = data_config_query->module_data_config.enable_live_fixed_rate;
@@ -52,6 +64,8 @@ void DataConfig::store(ModuleDataConfigQuery* data_config_query)
 
 void DataConfig::getReply(ModuleDataConfig* module_data_config)
 {
+    module_data_config->capturing_available = capturing_available;
+    module_data_config->live_available = live_available;
     module_data_config->enable_capturing = enable_capturing;
     module_data_config->enable_live_all_samples = enable_live_all_samples;
     module_data_config->enable_live_fixed_rate = enable_live_fixed_rate;
@@ -66,6 +80,8 @@ void DataConfig::storeToFile()
     //create json
     JsonWriter json_writer;
     json_writer.begin();
+    json_writer.write("capturing_available", capturing_available);
+    json_writer.write("live_available", live_available);
     json_writer.write("enable_capturing", enable_capturing);
     json_writer.write("enable_live_all_samples", enable_live_all_samples);
     json_writer.write("enable_live_fixed_rate", enable_live_fixed_rate);
@@ -91,6 +107,8 @@ void DataConfig::readFromFile()
     //read data config from json
     Json json;
     json.parse(data_config_json_str);
+    capturing_available = json.getBool("capturing_available", capturing_available);
+    live_available = json.getBool("live_available", live_available);
     enable_capturing = json.getBool("enable_capturing");
     enable_live_all_samples = json.getBool("enable_live_all_samples");
     enable_live_fixed_rate = json.getBool("enable_live_fixed_rate");

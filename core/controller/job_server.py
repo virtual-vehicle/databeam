@@ -54,7 +54,7 @@ class JobServer(LoggerMixin):
         self.logger.debug("Stopping Job Server.")
         self._kill = True
         self._update_event.set()
-        if self._run_thread is not None:
+        if self._run_thread is not None and self._run_thread.is_alive():
             self._run_thread.join()
             self._run_thread = None
 

@@ -14,6 +14,7 @@ import pynmeagps
 
 from vif.data_interface.module_interface import main
 from vif.data_interface.io_module import IOModule
+from vif.data_interface.module_meta_factory import ModuleMetaFactory
 from vif.data_interface.network_messages import Status
 
 from io_modules.nmea_gnss.config import NMEAReaderConfig
@@ -335,8 +336,10 @@ class NMEAReader(IOModule):
         self.logger.info('stop sampling!')
         self._stop_thread()
 
-    def command_get_meta_data(self) -> Dict[str, Union[str, int, float, bool]]:
-        return {
+    def command_get_meta_data(self) -> ModuleMetaFactory:
+        meta = ModuleMetaFactory()
+
+        meta.add_dict({
             'lat': 'deg',
             'lon': 'deg',
             'alt': 'm',
@@ -347,7 +350,9 @@ class NMEAReader(IOModule):
             # https://github.com/adrianmo/go-nmea/blob/master/ths.go
             'heading_status': '{"A": "autonomous", "E": "estimated", "M": "manual", "S": "simulated", "V": "invalid"}',
             'speed': 'm/s',
-        }
+        })
+
+        return meta
 
     def command_get_schemas(self) -> List[Dict]:
         return [{

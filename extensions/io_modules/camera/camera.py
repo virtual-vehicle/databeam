@@ -10,11 +10,13 @@ import cv2 as cv
 from typing import Optional, Dict, Union, List
 import base64
 from datetime import datetime
+import os
 
 import environ
 
 from vif.data_interface.module_interface import main
 from vif.data_interface.io_module import IOModule
+from vif.data_interface.module_meta_factory import ModuleMetaFactory
 
 from io_modules.camera.config import CameraConfig
 from vif.file_helpers.creation import create_directory
@@ -93,31 +95,38 @@ class Camera(IOModule):
             video_filename = export_job[0]
             timecodes_filename = export_job[1]
             transformed_filename = export_job[2]
+            temp_filename = transformed_filename + "_tmp.mp4"
 
             # log export
             self.logger.debug("Transform video file: " + video_filename)
 
-            # create mp4fpsmod command
-            mp4fpsmod_call = f'mp4fpsmod -o {transformed_filename} -t {timecodes_filename} {video_filename}'
-
-            # log command
+            # call mp4fpsmod for recoding timestamps of individual frames in container
+            mp4fpsmod_call = f'mp4fpsmod -o {temp_filename} -t {timecodes_filename} {video_filename}'
             self.logger.debug(mp4fpsmod_call)
-
-            # execute command
             mp4fpsmod_return_code = subprocess.call(mp4fpsmod_call, shell=True)
 
-            # check if no errors occurred
             if mp4fpsmod_return_code != 0:
                 msg = f"{video_filename} - mp4fpsmod returned {mp4fpsmod_return_code}"
                 self.logger.error(msg)
                 self.module_interface.log_gui(msg)
-            else:
-                self.logger.info(f"{video_filename} - export done")
-                self.module_interface.log_gui(f"{video_filename} - export done")
-                # TODO check filesize
-                # TODO delete files if all OK
+                continue
 
-            # TODO GUI feedback
+            # call Mp4Box for reencoding mp4 container with correct metadata (e.g. video length)
+            mp4box_call = f"MP4Box -add {temp_filename} -new {transformed_filename}"
+            self.logger.debug(mp4box_call)
+
+            mp4box_return_code = subprocess.call(mp4box_call, shell=True)
+
+            if mp4box_return_code != 0:
+                msg = f"{video_filename} - mp4box returned {mp4box_return_code}"
+                self.logger.error(msg)
+                self.module_interface.log_gui(msg)
+                continue
+
+            # remove intermediate mp4 file
+            os.remove(temp_filename)
+            self.logger.info(f"{video_filename} - export done")
+            self.module_interface.log_gui(f"{video_filename} - export done")
 
     def _worker_thread_fn(self):
         self.logger.debug('worker thread running')
@@ -426,17 +435,22 @@ class Camera(IOModule):
             self.logger.error(f'error applying config: {type(e).__name__}: {e}\n{traceback.format_exc()}')
             return Status(error=True, title=type(e).__name__, message=str(e))
 
-    def command_get_meta_data(self) -> Dict[str, Union[str, int, float, bool]]:
+    def command_get_meta_data(self) -> ModuleMetaFactory:
         duration_s = (self._time_ns_last_frame - self._time_ns_first_frame) / 1e9
         try:
             avg_fps = self._frame_count / duration_s
         except ZeroDivisionError:
             avg_fps = 0
-        return {
+
+        meta = ModuleMetaFactory()
+
+        meta.add_dict({
             'frame_count': self._frame_count,
             'duration_s': duration_s,
             'average_fps': avg_fps
-        }
+        })
+
+        return meta
 
     def command_get_schemas(self) -> List[Dict]:
         return [{

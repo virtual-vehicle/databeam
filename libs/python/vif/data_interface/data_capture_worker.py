@@ -220,7 +220,7 @@ class DataCaptureWorker(LoggerMixin):
         self.logger.info('starting capture process')
         self._capture_proc.start()
         # wait for process to start
-        self._capture_process_ready_event.wait(timeout=6)  # this should take about 0.5 seconds max.
+        self._capture_process_ready_event.wait(timeout=10)  # this should take about 0.5 seconds max.
         if self._capture_process_ready_event.is_set():
             self.logger.info('starting capture process succeeded')
         else:

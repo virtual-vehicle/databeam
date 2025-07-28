@@ -176,8 +176,8 @@ class Controller
     .then(data => {
       if(this.model.setReplyStatus(data))
       {
-        self.model.setModuleDocumentation(data.documentation)
         self.model.setSelectedModule(module_name)
+        self.model.setModuleDocumentation(data.documentation) 
       }
     })
   }
@@ -319,6 +319,7 @@ class Controller
     .then(data => {
       if(this.model.setReplyStatus(data))
       {
+        console.log("Controller:updateDataConfig for " + module_name + ": " + JSON.stringify(new_data_config))
         self.fetchModules()
       }
     })
@@ -536,8 +537,17 @@ class Controller
   requestPreview(module_name)
   {
     console.log("Controller:requestPreview()")
+
+    let module = this.model.getModuleByName(module_name)
+    let schema_index = module != undefined ? module.getLatestSchemaIndex() : 0
+
     let self = this
-    let json_object = {id: this.model.getClientID(), module_name: module_name};
+
+    let json_object = {
+      id: this.model.getClientID(), 
+      module_name: module_name,
+      schema_index: schema_index
+    };
 
     fetch(this.model.getDataBeamURLHTTP() + "/preview", {
       method: 'POST',

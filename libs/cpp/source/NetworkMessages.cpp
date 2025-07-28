@@ -109,9 +109,12 @@ std::string StartStopReply::serialize()
 // ModuleDataConfig
 // ===========================================================================
 
-ModuleDataConfig::ModuleDataConfig(bool enable_capturing, bool enable_live_all_samples, 
+ModuleDataConfig::ModuleDataConfig(bool capturing_available, bool live_available, 
+    bool enable_capturing, bool enable_live_all_samples, 
     bool enable_live_fixed_rate, float live_rate_hz)
 {
+    this->capturing_available = capturing_available;
+    this->live_available = live_available;
     this->enable_capturing = enable_capturing;
     this->enable_live_all_samples = enable_live_all_samples;
     this->enable_live_fixed_rate = enable_live_fixed_rate;
@@ -128,6 +131,8 @@ void ModuleDataConfigQuery::deserialize(std::string json_str)
 {
     Json json(json_str);
     cmd = static_cast<ModuleDataConfigCmd>(json.getInt("cmd"));
+    module_data_config.capturing_available = json.getNestedBool("/config/capturing_available", module_data_config.capturing_available);
+    module_data_config.live_available = json.getNestedBool("/config/live_available", module_data_config.live_available);
     module_data_config.enable_capturing = json.getNestedBool("/config/enable_capturing");
     module_data_config.enable_live_all_samples = json.getNestedBool("/config/enable_live_all_samples");
     module_data_config.enable_live_fixed_rate = json.getNestedBool("/config/enable_live_fixed_rate");
@@ -153,6 +158,8 @@ std::string ModuleDataConfigReply::serialize()
         status.serialize(w);
     w.endObject();
     w.beginObject("config");
+        w.write("capturing_available", module_data_config.capturing_available);
+        w.write("live_available", module_data_config.live_available);
         w.write("enable_capturing", module_data_config.enable_capturing);
         w.write("enable_live_all_samples", module_data_config.enable_live_all_samples);
         w.write("enable_live_fixed_rate", module_data_config.enable_live_fixed_rate);
@@ -318,4 +325,14 @@ void ExternalDataBeamQueryReply::deserialize(std::string json_str)
     Json json(json_str);
     db_id_list = json.getStringArray("db_id_list");
     hostname_list = json.getStringArray("hostname_list");
+}
+
+// ===========================================================================
+// ModuleLatestQuery
+// ===========================================================================
+
+void ModuleLatestQuery::deserialize(std::string json_str)
+{
+    Json json(json_str);
+    schema_index = json.getInt("schema_index");
 }

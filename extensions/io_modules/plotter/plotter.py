@@ -2,13 +2,14 @@
 Live data plotter
 """
 import traceback
-from typing import Optional
+from typing import Optional, Dict, Union
 
 import environ
 import queue
 
 from vif.data_interface.module_interface import main
 from vif.data_interface.io_module import IOModule
+from vif.data_interface.module_meta_factory import ModuleMetaFactory
 from vif.websockets.websocket_api import WebSocketAPI
 
 from io_modules.plotter.server import Server
@@ -31,6 +32,8 @@ class Plotter(IOModule):
         self.logger.debug('initializing')
         self._environ_config = environ.to_config(ModuleEnv)
         self.name = self._environ_config.MODULE_NAME
+        self.data_broker.capabilities.capture_data = False
+        self.data_broker.capabilities.live_data = False
 
         self._shutdown_queue = queue.Queue()
         self._server: Optional[Server] = None
@@ -45,6 +48,17 @@ class Plotter(IOModule):
         self._server.shutdown()
         self._websocket_api.shutdown()
         self.logger.info('module closed')
+
+    def command_get_meta_data(self) -> ModuleMetaFactory:
+        config = self.config_handler.config
+        meta_cfg = ModuleMetaFactory()
+        meta_cfg.add("some_key", "some_data")
+        meta_cfg.add_webinterface("Plotter", port=config['port'])
+
+        #for i in range(0, 2):
+        #    meta_cfg.add_video_stream(f'Stream {i}', url="stream_url")
+
+        return meta_cfg
 
     def command_validate_config(self, config) -> Status:
         port = config['port']

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["scikit-build-core", "pybind11", "conan"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "databeam-mcap-reader"
+version = "0.2.0"
+description = "MCAP file reader for JSON data implemented in C++ and Python."
+requires-python = ">=3.10"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE.txt"]
+authors = [
+    { name = "VIRTUAL VEHICLE Research GmbH", email = "peter.sammer@v2c2.at" },
+]
+dependencies = [
+    "numpy",
+    "mcap",
+    "orjson",
+    "requests"
+]
+
+[project.urls]
+"Bug Tracker" = "https://github.com/virtual-vehicle/databeam/issues"
+"Source" = "https://github.com/virtual-vehicle/databeam/tree/main/tools/databeam_mcap_reader"
+"Documentation" = "https://github.com/virtual-vehicle/databeam/tree/main/tools/databeam_mcap_reader/README.md"
+
+[tool.scikit-build]
+wheel.packages = ["src/databeam_mcap_reader"]
+# wheel.py-api = "py3"
+cmake.build-type = "Release"
+# build.verbose = true
+# logging.level = "INFO"
+sdist.exclude = ["build"]
+# sdist.cmake = true
+
+[tool.scikit-build.cmake.define]
+CMAKE_TOOLCHAIN_FILE = "build/conan_toolchain.cmake"
+CMAKE_BUILD_TYPE = "Release"

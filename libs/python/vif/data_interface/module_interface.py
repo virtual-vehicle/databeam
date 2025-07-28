@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timezone
 import threading
 from pathlib import Path
-from typing import Type, Dict, Optional
+from typing import Type, Dict, Optional, Callable
 import logging
 import traceback
 import signal
@@ -34,7 +34,7 @@ from vif.data_interface.network_messages import (MeasurementState, ModuleRegistr
                                                  ModuleDataConfigCmd, ModuleDataConfigReply, DocumentationReply,
                                                  MeasurementInfo, ModuleConfigEvent, ModuleConfigEventReply,
                                                  ExternalDataBeamQuery, ExternalDataBeamQueryReply,
-                                                 GetSchemasReply)
+                                                 GetSchemasReply, ModuleLatestQuery)
 
 
 @environ.config(prefix='')
@@ -104,6 +104,8 @@ class ModuleInterface(LoggerMixin):
 
         # capturing is disabled per default if module sets it's capabilities accordingly
         self.data_config: ModuleDataConfig = ModuleDataConfig(
+            capturing_available=self.data_broker.capabilities.capture_data,
+            live_available=self.data_broker.capabilities.live_data,
             enable_capturing=self.data_broker.capabilities.capture_data,
             enable_live_all_samples=False,
             enable_live_fixed_rate=False,
@@ -161,6 +163,13 @@ class ModuleInterface(LoggerMixin):
         except FileNotFoundError:
             # write default config
             self.__write_data_config()
+        except KeyError as e:
+            # update old version of data_config.json
+            with self.data_config_path.open('r') as f:
+                temp_data_config = self.data_config.get_dict()
+                temp_data_config.update(json.loads(f.read()))
+                self.data_config = ModuleDataConfig.from_dict(temp_data_config)
+                self.__logger.info(f'Data config recovered from {self.data_config_path}: {self.data_config.get_dict()}')
         except Exception as e:
             self.__logger.error(f'EX data-cfg {type(e).__name__}: {e}\n{traceback.format_exc()}')
         self.data_broker.configure_live(self.data_config)
@@ -200,11 +209,17 @@ class ModuleInterface(LoggerMixin):
         self.data_broker.start_live_process()
 
         # register subscribers
-        for sub_key, sub_cb in [(Key(self.db_id, f'm/{self.name}', 'event_in'), self.__cb_sub_event),
-                                (Key(self.db_id, 'c', 'bc/start_sampling'), self.__cb_sub_start_sampling),
+        for sub_key, sub_cb in [(Key(self.db_id, 'c', 'bc/start_sampling'), self.__cb_sub_start_sampling),
                                 (Key(self.db_id, 'c', 'bc/start_capture'), self.__cb_sub_start_capture),
                                 ]:
             self.cm.subscribe(sub_key, sub_cb)
+
+    def subscribe_module_events(self, module_name: str) -> int:
+        key: Key = Key(self.db_id, f"m/{module_name}", "event_out")
+        return self.cm.subscribe(key, self.__cb_sub_event)
+
+    def unsubscribe_module_events(self, sub_id: int) -> None:
+        self.cm.unsubscribe(sub_id)
 
     def register(self):
         message = ModuleRegistryQuery(cmd=ModuleRegistryQueryCmd.REGISTER,
@@ -597,10 +612,9 @@ class ModuleInterface(LoggerMixin):
 
     def __cb_get_latest(self, data: bytes) -> str | bytes:
         try:
-            # logger = logging.getLogger('__cb_get_latest')
-            # logger.debug('rx %s', key)
+            message: ModuleLatestQuery = ModuleLatestQuery.deserialize(data)
 
-            time_ns, latest_data = self.data_broker.get_latest()
+            time_ns, latest_data = self.data_broker.get_latest(message.schema_index)
             if latest_data is not None:
                 latest_data['ts'] = time_ns
                 return orjson.dumps(latest_data)
@@ -680,7 +694,7 @@ def main(module: Type[IOModule], config_type: Type[BaseConfig], module_name: str
             pass
 
     # ignore child signal
-    signal.signal(signal.SIGCHLD, lambda signum, frame: log_reentrant(f'ignoring signal {signum}'))
+    signal.signal(signal.SIGCHLD, signal.SIG_DFL)
 
     # handle shutdown signals
     for sig in (signal.SIGINT, signal.SIGTERM):

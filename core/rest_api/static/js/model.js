@@ -25,6 +25,10 @@ class Model {
     this.config_dirty = false
     this.root_config_entry = null
 
+    //config layout
+    this.config_layout = localStorage.getItem("config_layout")
+    if(this.config_layout == null) this.config_layout = "wrap"
+
     //jobs
     this.jobs = []
     this.busy_jobs = []
@@ -66,6 +70,8 @@ class Model {
     this.databeam_ws_url = databeam_ip + ":" + this.ws_port
   }
 
+  getDataBeamIP() { return "http://" + this.databeam_ip }
+
   setClientID(client_id){ this.client_id = client_id }
   getDataBeamURLHTTP() { return "http://" + this.databeam_url + "/" }
   getDataBeamURLWebSocket() {return "ws://" + this.databeam_ws_url}
@@ -100,6 +106,7 @@ class Model {
   getCaptureRunning() { return this.capture_running }
   getSamplingRunning() { return this.sampling_running }
   getRootConfigEntry(){return this.root_config_entry}
+  getConfigLayout() { return this.config_layout }
 
   setEventModulesChanged(state) { this.event_modules_changed = state }
   setEventFilesChanged(state) { this.event_files_changed = state }
@@ -325,6 +332,13 @@ class Model {
     this.view.onMeasurementsChanged()
   }
 
+  setLatestTopic(latest_topic)
+  {
+    let module = this.getModuleByName(this.selected_module)
+    if(module == undefined) return
+    module.setLatestTopic(latest_topic)
+  }
+
   setModules(modules_json)
   {
     //console.log(JSON.stringify(modules_json))
@@ -349,7 +363,12 @@ class Model {
     {
       let module_name = prev_modules[i].getName()
       let m = this.getModuleByName(module_name)
-      if (m != undefined) m.setReady(prev_modules[i].getReady())
+
+      if(m != undefined) 
+      {
+        m.setReady(prev_modules[i].getReady())
+        m.setLatestSchemaIndex(prev_modules[i].getLatestSchemaIndex())
+      }
     }
 
     //sort modules by name
@@ -411,6 +430,13 @@ class Model {
     }
 
     this.view.onMetaChanged()
+  }
+
+  toggleConfigLayout()
+  {
+    this.config_layout = this.config_layout == "wrap" ? "nowrap" : "wrap"
+    localStorage.setItem("config_layout", this.config_layout)
+    this.view.onConfigChanged()
   }
 
   setConfigString(module_name, config_string)

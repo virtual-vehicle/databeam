@@ -4,3 +4,4 @@ Pipfile.lock
 .idea
 __pycache__
 .run
+*.mcap

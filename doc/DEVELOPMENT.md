@@ -33,7 +33,6 @@ A Python virtual environment will be created in `extensions/.venv` to run custom
 
 For the Docker build process, base-images are needed. Build or update by running:
 ```
-BUILD_LOCAL=1 make pull-images
 BUILD_LOCAL=1 make base-all
 ```
 

@@ -486,7 +486,7 @@ std::string ModuleInterface::notify_queryable(std::string topic, std::string pay
         if(write_config)
         {
           Utils::write_string_to_file(module_config_file, json.stringify_pretty());
-          backupTimestampedConfig(10, json);
+          backupTimestampedConfig(100, json);
         }
       }
 
@@ -582,8 +582,10 @@ std::string ModuleInterface::notify_queryable(std::string topic, std::string pay
   }
   else if(topic == "get_latest")
   {
+    ModuleLatestQuery message;
+    message.deserialize(payload);
     //reply with latest json data
-    std::string latest_json_str = data_broker.getLatestData();
+    std::string latest_json_str = data_broker.getLatestData(message.schema_index);
     return latest_json_str;
   }
   else if(topic == "get_schemas")

@@ -1,0 +1,11 @@
+**/*.mcap
+**/__pycache__
+**/.idea
+**/.vscode
+**/.venv
+**/venv
+**/.git
+**/.gitignore
+**/README.md
+**/tests
+**/Dockerfile

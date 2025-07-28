@@ -18,11 +18,16 @@ public:
     bool getFixedEnabled();
     bool getAllEnabled();
     bool getEnableCapturing();
+    bool getCapturingAvailable();
+    bool getLiveAvailable();
+
 private:
     void storeToFile();
     void readFromFile();
 
     std::string module_data_config_file = "";
+    bool capturing_available = true;
+    bool live_available = true;
     bool enable_capturing = true;
     bool enable_live_all_samples = false;
     bool enable_live_fixed_rate = false;

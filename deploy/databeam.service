@@ -2,6 +2,7 @@
 Description=Data.Beam Main Application
 Requires=docker.service network.target local-fs.target databeam_hostcmd.service
 After=docker.service network.target local-fs.target databeam_hostcmd.service
+Before=multi-user.target
 
 [Service]
 Type=notify

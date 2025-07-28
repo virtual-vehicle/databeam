@@ -228,7 +228,9 @@ void DataBroker::prepareCapture(std::string module_name, std::string module_type
     }
 
     //only prepare mcap file if capturing is enabled
-    if(!data_config->getEnableCapturing()) return;
+    if(!data_config->getEnableCapturing() || !data_config->getCapturingAvailable()) {
+        return;
+    }
 
     //log start
     logger->debug("[DataBroker] start measurement, prepare MCAP write.");
@@ -286,7 +288,7 @@ void DataBroker::startCapture()
         return;
     }
 
-    if(!mcap_open && data_config->getEnableCapturing())
+    if(!mcap_open && data_config->getEnableCapturing() && data_config->getCapturingAvailable())
     {
         logger->warning("[DataBroker] MCAP file not open on startCapture with enabled capturing.");
         return;
@@ -361,6 +363,7 @@ void DataBroker::setSchemas(std::vector<McapSchema>& schema_list)
     //clear all schema topics
     schema_all_topics.clear();
     schema_fixed_topics.clear();
+    latest_json_writers.clear();
 
     //create new list of topics for each schema
     for(unsigned int i = 0; i < schema_list.size(); i++)
@@ -368,6 +371,8 @@ void DataBroker::setSchemas(std::vector<McapSchema>& schema_list)
         std::string topic = schema_list[i].get_topic();
         schema_all_topics.push_back(this->db_id + "/m/" + this->module_name + "/" + topic + "/liveall") ;
         schema_fixed_topics.push_back(db_id + "/m/" + module_name + "/" + topic + "/livedec");
+        JsonWriter json_writer;
+        latest_json_writers.push_back(json_writer);
     }
 
     logger->debug("Schema All Topics: " + Utils::vectorToString(schema_all_topics));
@@ -384,14 +389,18 @@ void DataBroker::data_in(long long timestamp, JsonWriter &json_writer, unsigned 
     //points to either latest or live json writer if live flag is set
     JsonWriter* temp_live_writer = nullptr;
 
+    //clamp schema index
+    schema_index = schema_index < latest_json_writers.size() ? schema_index : 0;
+
     //copy json writer to latest or live writer
     if(latest)
     {
-        latest_json_writer.init(json_writer);
-        latest_json_writer.write("ts", timestamp);
-        latest_json_writer.end();
+        JsonWriter* w = &latest_json_writers[schema_index];
+        w->init(json_writer);
+        w->write("ts", timestamp);
+        w->end();
 
-        if(live) temp_live_writer = &latest_json_writer;
+        if(live) temp_live_writer = w;
     }
     else
     {
@@ -433,7 +442,7 @@ void DataBroker::data_in(long long timestamp, JsonWriter &json_writer, unsigned 
     }
 
     //write live data if live flag is set
-    if(live)
+    if(live && data_config->getLiveAvailable())
     {
         //forward all samples if enabled
         if(data_config->getAllEnabled())
@@ -470,18 +479,24 @@ void DataBroker::data_in(long long timestamp, JsonWriter &json_writer, unsigned 
     }
 }
 
-std::string DataBroker::getLatestData()
+std::string DataBroker::getLatestData(unsigned int schema_index)
 {
+    //clamp schema index
+    schema_index = schema_index < latest_json_writers.size() ? schema_index : 0;
+
     //sample string to return
     std::string to_return;
 
     //acquire data broker lock
     lock();
 
+    //get json writer for schema index
+    JsonWriter* w = &latest_json_writers[schema_index];
+
     //get current json sample string or empty json
-    if(latest_json_writer.getStringPtr()->size() > 0)
+    if(w->getStringPtr()->size() > 0)
     {
-        to_return = *latest_json_writer.getStringPtr();
+        to_return = *w->getStringPtr();
     }
     else
     {

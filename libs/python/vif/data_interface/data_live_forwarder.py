@@ -286,7 +286,7 @@ class DataLiveForwarder(LoggerMixin):
         self.logger.info('starting live-data process')
         self._live_proc.start()
         # wait for process to start
-        self._live_process_ready_event.wait(timeout=6)  # this should take about 1 second
+        self._live_process_ready_event.wait(timeout=10)  # this should take about 1 second
         if self._live_process_ready_event.is_set():
             self.logger.info('starting live-data process succeeded')
         else:

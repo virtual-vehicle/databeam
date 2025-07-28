@@ -56,7 +56,7 @@ if __name__ == '__main__':
             pass
 
     # ignore child signal
-    signal.signal(signal.SIGCHLD, lambda signum, frame: log_reentrant(f'ignoring signal {signum}'))
+    signal.signal(signal.SIGCHLD, signal.SIG_DFL)
 
     # handle shutdown signals
     for sig in (signal.SIGINT, signal.SIGTERM):

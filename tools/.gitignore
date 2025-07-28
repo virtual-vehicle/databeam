@@ -3,3 +3,5 @@
 *.xml
 *.csv
 *.npy
+mcap_cli
+mcap_cli.exe

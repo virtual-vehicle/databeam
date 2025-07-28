@@ -76,14 +76,21 @@ fi
 
 # adopt docker IP ranges for compatibility with host network
 DOCKER_DAEMON_CONFIG=/etc/docker/daemon.json
-printf "\nDocker config update .. old config:\n"
+printf "\nDocker config update ..\n"
 if [ -f $DOCKER_DAEMON_CONFIG ] ; then
+    printf ".. old config:\n"
     cat $DOCKER_DAEMON_CONFIG
     printf "\nbacking up Docker config.\n"
     sudo cp $DOCKER_DAEMON_CONFIG ${DOCKER_DAEMON_CONFIG}_BAK$(date +"%Y%m%d%H%M%S")
 else
-    printf "\ncreating Docker config.\n"
-    sudo touch $DOCKER_DAEMON_CONFIG
+    printf "\ncreating new (empty) Docker config.\n"
+    printf "{}" | sudo tee $DOCKER_DAEMON_CONFIG
+fi
+
+# install jq if not present
+if ! command -v jq &> /dev/null; then
+    printf "\ninstalling jq ..\n"
+    sudo apt-get update && sudo apt-get install -y jq
 fi
 
 jq '
@@ -131,18 +138,20 @@ fi
 # enable databeam main service
 sudo systemctl enable databeam.service
 
-# pull basic images
-printf "\ndockerhub login\n"
-sudo docker login -u $DOCKERHUB_USER -p $DOCKERHUB_TOKEN
-
-printf "\npulling images defined in docker-compose.yml\n"
-sudo docker compose --env-file ${ROOT_DIR}/.env -f ${ROOT_DIR}/docker-compose.yml pull -q
-
 # Increases the USB kernel memory from 16MB to 1000MB can be important for high USB load measurement
 # scenarios, such as using multiple cameras.
 echo "Increasing kernel USB memory buffer."
 sudo bash $SCRIPT_DIR/change_usb_mem.sh
 
+# spawn new shell with docker group privileges to execute commands without reboot
+newgrp docker << EOF
+# pull basic images
+printf "\ndockerhub login\n"
+docker login -u $DOCKERHUB_USER -p $DOCKERHUB_TOKEN
+
+printf "\npulling images defined in docker-compose.yml\n"
+docker compose --env-file ${ROOT_DIR}/.env -f ${ROOT_DIR}/docker-compose.yml pull -q
+EOF
 
 printf "\nsetup done! $(date)\n"
 echo ""

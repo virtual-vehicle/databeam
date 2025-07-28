@@ -11,9 +11,9 @@ class CameraConfig(BaseConfig):
     def _schema(cls) -> Mapping:
         cfg = ConfigFactory()
         cfg.string('resolution', '1280 x 720').select(
-            ['1920 x 1080', '1280 x 720', '960 x 540', '848 x 480', '640 x 480', '640 x 360', '424 x 240', '320 x 240',
+            ['1920 x 1080', '1280 x 720', '1024 x 768', '960 x 540', '848 x 480', '800 x 600', '640 x 480', '640 x 360', '424 x 240', '320 x 240',
              '320 x 180'])
-        cfg.string('fps', '30').select(['60', '30', '15', '5']).label('FPS')
+        cfg.string('fps', '30').select(['60', '30', '15', '6', '5']).label('FPS')
         cfg.string('codec', 'MJPG').select(['MJPG', 'YUYV'])
         cfg.string('rotation', 'None').select(['None', '90 deg CW', '90 deg CCW', '180 deg'])
         cfg.integer('dot_in_center_size', 0)

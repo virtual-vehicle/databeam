@@ -11,6 +11,7 @@ class Model {
     this.module_data = {}
     this.modules = []
     this.config = {}
+    this.tab_visible = true;
   }
 
   init(view)
@@ -40,6 +41,16 @@ class Model {
   getModules() { return this.modules }
   getConfig() { return this.config }
 
+  setTabVisible(tab_visible)
+  {
+    this.tab_visible = tab_visible
+  }
+
+  getTabVisible()
+  {
+    return this.tab_visible
+  }
+
   setOnlineStatus(online_status)
   {
     this.online_status = online_status
@@ -59,11 +70,24 @@ class Model {
     return {}
   }
 
-  setModuleLiveSource(module_name, live_source)
+  getModuleByName(module_name)
   {
     for(let i = 0; i < this.modules.length; i++)
     {
       if(this.modules[i].getName() == module_name)
+      {
+        return this.modules[i]
+      }
+    }
+
+    return undefined
+  }
+
+  setModuleLiveSource(module_name, live_source)
+  {
+    for(let i = 0; i < this.modules.length; i++)
+    {
+      if(this.modules[i].getModuleName() == module_name)
       {
         this.modules[i].setLiveSource(live_source)
       }
@@ -89,7 +113,7 @@ class Model {
 
     for(let i = 0; i < this.modules.length; i++)
     {
-      live_dict[this.modules[i].getName()] = this.modules[i].getLiveSource()
+      live_dict[this.modules[i].getModuleName()] = this.modules[i].getLiveSource()
     }
 
     return JSON.stringify(live_dict)
@@ -105,9 +129,30 @@ class Model {
 
     for(let i = 0; i < module_names.length; i++)
     {
-      let live_source = module_names[i] in config_live_dict ? config_live_dict[module_names[i]] : "Fixed"
-      let module_entry = new ModuleEntry(module_names[i], meta_dict[module_names[i]], live_source)
-      this.modules.push(module_entry)
+      let meta = meta_dict[module_names[i]]
+
+      if(Object.hasOwn(meta, "_mcap_topics"))
+      {
+        let mcap_topics = meta["_mcap_topics"]
+
+        for(let k = 0; k < mcap_topics.length; k++)
+        {
+          let live_source = module_names[i] in config_live_dict ? config_live_dict[module_names[i]] : "Fixed"
+          let module_entry = new ModuleEntry(module_names[i] + "/" + mcap_topics[k], meta, live_source)
+          this.modules.push(module_entry)
+        }
+      }
+
+      if(!Object.hasOwn(meta, "_video_streams")) continue
+
+      let video_streams = meta["_video_streams"]
+
+      for(let k = 0; k < video_streams.length; k++)
+      {
+        let module_entry = new ModuleEntry("RTSP/" + module_names[i] + "/" + video_streams[k]['label'], meta, "Fixed")
+        module_entry.setVideoStreamURL(this.server_ip + ":" + video_streams[k]['port'] + video_streams[k]['path'])
+        this.modules.push(module_entry)
+      }
     }
 
     //sort modules by name

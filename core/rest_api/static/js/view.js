@@ -8,6 +8,9 @@ class View
     //module log overlay
     this.last_module_log_name = ""
 
+    //form id counter to prevent warnings due to missing form ids
+    this.form_id_counter = 0
+
     //module log div
     document.getElementById('log_alert_id').addEventListener(
       "click", event => this.onShowModuleLogOverlay(event), true);
@@ -51,6 +54,9 @@ class View
     document.getElementById('show_meta_button_id').addEventListener(
       "click", event => this.onShowMeta(event), true);
 
+    document.getElementById('config_layout_button_id').addEventListener(
+      "click", event => this.onConfigLayoutButtonClick(event), true);
+
     document.getElementById('simple_config_button_id').addEventListener(
       "click", event => this.onSimpleConfigButtonClick(event), true);
 
@@ -74,6 +80,10 @@ class View
 
     document.getElementById('config_inspector_id').addEventListener(
       "change", event => this.onConfigTextAreaChanged(event), true);
+
+    //preview
+    document.getElementById('preview_topic_id').addEventListener(
+      "change", event => this.onPreviewTopicSelectionChanged(event), true);
 
     //data tab
     document.getElementById('download_measurements_button_id').addEventListener(
@@ -145,6 +155,7 @@ class View
     });
 
     this.onModelThemeChanged()
+    this.updateConfigLayoutButton()
   }
 
   onlineStatusChanged()
@@ -394,6 +405,7 @@ class View
 
         //create text input field for meta key
         let key_text_input = document.createElement("INPUT")
+        key_text_input.name = this.getNextFormIDString()
         key_text_input.setAttribute("type", "text")
         key_text_input.setAttribute("class", "meta-input-form")
         key_text_input.value = key
@@ -403,6 +415,7 @@ class View
 
         //create text input field for meta value
         let value_text_input = document.createElement("INPUT")
+        value_text_input.name = this.getNextFormIDString()
         value_text_input.setAttribute("type", "text")
         value_text_input.setAttribute("class", "meta-input-form")
         value_text_input.value = value
@@ -797,7 +810,7 @@ class View
     }
 
     //create table header (if not already present)
-    const header_labels = ["Ready", "Name", "Type", "Capture", "All", "Fixed", "Rate [Hz]", "Config", "Preview", "Doc"]
+    const header_labels = ["Ready", "Name", "Type", "Capture", "All", "Fixed", "Rate [Hz]", "Actions"]
     this.createTableHeader(table, header_labels)
 
     //get table body
@@ -823,13 +836,21 @@ class View
         table_body.rows[i].cells[1].innerHTML = m.getName()
         table_body.rows[i].cells[2].innerHTML = m.getType()
         table_body.rows[i].cells[3].firstChild.checked = m.getCapture()
+        table_body.rows[i].cells[3].firstChild.style.visibility = m.getCapturingAvailable() ? "visible" : "hidden";
         table_body.rows[i].cells[4].firstChild.checked = m.getAll()
+        table_body.rows[i].cells[4].firstChild.style.visibility = m.getLiveAvailable() ? "visible" : "hidden";
         table_body.rows[i].cells[5].firstChild.checked = m.getFixed()
+        table_body.rows[i].cells[5].firstChild.style.visibility = m.getLiveAvailable() ? "visible" : "hidden";
         table_body.rows[i].cells[6].firstChild.value = m.getFixedRate()
+        table_body.rows[i].cells[6].firstChild.style.visibility = m.getLiveAvailable() ? "visible" : "hidden";
+
+        let actions_cell = table_body.rows[i].cells[7]
+        actions_cell.firstChild.innerHTML = ""
+        this.createModuleButtons(m, actions_cell.firstChild)
         //table_body.rows[i].cells[6].firstChild.setAttribute("module-name", m.getName())
         //table_body.rows[i].cells[7].firstChild.setAttribute("module-name", m.getName())
         //table_body.rows[i].cells[8].firstChild.setAttribute("module-name", m.getName())
-        const attr_indices = [3, 4, 5, 6, 7, 8, 9]
+        const attr_indices = [3, 4, 5, 6]
 
         for(let k = 0; k < attr_indices.length; k++)
         {
@@ -849,48 +870,108 @@ class View
 
         //capture checkbox
         let capture_checkbox = this.createCheckBox([['module-name', m.getName()]], m.getCapture())
+        capture_checkbox.id = this.getNextFormIDString()
+        capture_checkbox.style.visibility = m.getCapturingAvailable() ? "visible" : "hidden";
         capture_checkbox.addEventListener("click", event => this.onDataConfigChanged(event, "capture"), true);
         row.insertCell().appendChild(capture_checkbox)
 
-        //capture checkbox
+        //live-all checkbox
         let all_checkbox = this.createCheckBox([['module-name', m.getName()]], m.getAll())
+        all_checkbox.id = this.getNextFormIDString()
+        all_checkbox.style.visibility = m.getLiveAvailable() ? "visible" : "hidden";
         all_checkbox.addEventListener("click", event => this.onDataConfigChanged(event, "all"), true);
         row.insertCell().appendChild(all_checkbox)
 
-        //capture checkbox
+        //live-fixed checkbox
         let fixed_checkbox = this.createCheckBox([['module-name', m.getName()]], m.getFixed())
+        fixed_checkbox.id = this.getNextFormIDString()
+        fixed_checkbox.style.visibility = m.getLiveAvailable() ? "visible" : "hidden";
         fixed_checkbox.addEventListener("click", event => this.onDataConfigChanged(event, "fixed"), true);
         row.insertCell().appendChild(fixed_checkbox)
 
-        //latest period form
+        //live-fixed period form
         let fixed_rate_form = document.createElement("INPUT");
+        fixed_rate_form.id = this.getNextFormIDString()
         fixed_rate_form.setAttribute("type", "number");
         fixed_rate_form.setAttribute("class", "table-input-form");
         fixed_rate_form.setAttribute("module-name", m.getName())
         fixed_rate_form.value = m.getFixedRate()
+        fixed_rate_form.style.visibility = m.getLiveAvailable() ? "visible" : "hidden";
         fixed_rate_form.addEventListener("change", event => this.onDataConfigChanged(event, "rate"), true);
         row.insertCell().appendChild(fixed_rate_form)
 
-        //create show config button
-        let show_config_button = this.createEmojiButton([['module-name', m.getName()]], "&#128269;")
-        show_config_button.addEventListener("click", event => this.onGetConfig(event), true);
-        row.insertCell().appendChild(show_config_button)
+        //module buttons
+        let actions_div = document.createElement("div")
+        actions_div.className = "module-buttons-div"
+        let actions_cell = row.insertCell()
+        actions_cell.style.maxWidth = "300px"
+        actions_cell.appendChild(actions_div)
 
-        //create show config button
-        let preview_button = this.createEmojiButton([['module-name', m.getName()]], "&#128161;")
-        preview_button.addEventListener("click", event => this.onGetPreview(event), true);
-        row.insertCell().appendChild(preview_button)
-
-        //create show documentation button
-        let doc_button = this.createEmojiButton([['module-name', m.getName()]], "&#128196;")
-        doc_button.addEventListener("click", event => this.onGetDocumentation(event), true);
-        row.insertCell().appendChild(doc_button)
+        //create module buttons
+        this.createModuleButtons(m, actions_div)
       }
 
       //highlight selected row
       let row_class = m.getName() == this.model.getSelectedModule() ? "selected-tr" : "tr"
       table.rows[i].setAttribute("class", row_class)
     } 
+  }
+
+  createModuleButtons(m, parent_div)
+  {
+    //create show config button
+    let show_config_button = this.createEmojiButtonWithLabel(parent_div, [['module-name', m.getName()]], "&#128269;", "Config")
+    show_config_button.addEventListener("click", event => this.onGetConfig(event), true);
+
+    //create show preview button
+    let preview_button = this.createEmojiButtonWithLabel(parent_div, [['module-name', m.getName()]], "&#128161;", "Preview")
+    preview_button.addEventListener("click", event => this.onGetPreview(event), true);
+
+    //create show documentation button
+    let doc_button = this.createEmojiButtonWithLabel(parent_div, [['module-name', m.getName()]], "&#128196;", "Doc")
+    doc_button.addEventListener("click", event => this.onGetDocumentation(event), true);
+    
+    let webinterfaces_list = m.getWebInterfacesList()
+
+    for(let i = 0; i < webinterfaces_list.length; i++)
+    {
+      let label = webinterfaces_list[i]['label']
+      let port = webinterfaces_list[i]['port']
+      let databeam_ip = this.model.getDataBeamIP() + ":" + port.toString()
+      let web_button = this.createEmojiButtonWithLabel(parent_div, [['module-name', m.getName()]], "&#127760;", label)
+      web_button.setAttribute("m-url", databeam_ip)
+      web_button.addEventListener("click", event => this.onOpenModuleWebInterface(event), true);
+    }
+
+    let video_streams_list = m.getVideoStreamsList()
+
+    for(let i = 0; i < video_streams_list.length; i++)
+    {
+      let label = video_streams_list[i]['label']
+      let stream_port = video_streams_list[i]['port']
+      let stream_path = video_streams_list[i]['path']
+      let stream_url = this.model.getDataBeamIP() + ":" + stream_port + stream_path
+      let stream_button = this.createEmojiButtonWithLabel(parent_div, [['module-name', m.getName()]], "&#127909;", label)
+      stream_button.setAttribute("m-url", stream_url)
+      stream_button.addEventListener("click", event => this.onOpenModuleWebInterface(event), true);
+    }
+  }
+
+  createEmojiButtonWithLabel(parent_div, attributes, emoji_str, label_str)
+  {
+    let emoji_button = this.createEmojiButton(attributes, emoji_str)
+
+    let label_div = document.createElement("div")
+    label_div.innerHTML = label_str
+    label_div.className = "emoji-button-label"
+
+    let button_div = document.createElement("div")
+    button_div.className = "emoji-button-div"
+    button_div.appendChild(emoji_button)
+    button_div.appendChild(label_div)
+    parent_div.appendChild(button_div)
+
+    return emoji_button
   }
 
   onDataConfigChanged(event, key)
@@ -927,18 +1008,95 @@ class View
     this.controller.fetchDocumentation(event.currentTarget.getAttribute("module-name"))
   }
 
+  onOpenModuleWebInterface(event)
+  {
+    let url = event.currentTarget.getAttribute("m-url")
+    console.log("onOpenModuleWebInterface; " + url)
+    window.open(url, "_blank")
+  }
+
   onGetPreview(event)
   {
     console.log("View:onGetConfig()")
     document.getElementById("config_div_id").style.display = "none"
     document.getElementById("documentation_div_id").style.display = "none"
     document.getElementById("preview_div_id").style.display = "flex"
-    this.controller.requestPreview(event.currentTarget.getAttribute("module-name"))
+
+    // get and clear preview select
+    let preview_select = document.getElementById("preview_topic_id")
+    preview_select.innerHTML = ""
+
+    // get module mcap topics
+    let module_name = event.currentTarget.getAttribute("module-name")
+    let module = this.model.getModuleByName(module_name)
+    
+    // fill select with module topics and select current selected schema index
+    if(module != undefined)
+    {
+      let mcap_topics = module.getMCAPTopics()
+      let selected_schema_index = module.getLatestSchemaIndex()
+
+      mcap_topics.forEach((topic, index) => {
+        let option = document.createElement("option");
+        option.text = topic
+        if(index == selected_schema_index) option.selected = true
+        preview_select.add(option)
+      })
+    }
+
+    this.controller.requestPreview(module_name)
+  }
+
+  onPreviewTopicSelectionChanged(event)
+  {
+    //get latest topic string
+    let latest_topic = event.currentTarget.value
+
+    //set latest topic for selected module
+    this.model.setLatestTopic(latest_topic)
+
+    //request preview for selected topic
+    this.controller.requestPreview(this.model.getSelectedModule())
   }
 
   onDocumentationChanged()
   {
-    document.getElementById("module_doc_div_id").innerHTML = this.model.getModuleDocumentation()
+    //get and clear module documentation div
+    let module_doc_div = document.getElementById("module_doc_div_id")
+    module_doc_div.innerHTML = ""
+    
+    //get selected module
+    let module = this.model.getModuleByName(this.model.getSelectedModule())
+
+    //append mcap topics list if present
+    if(module != undefined && module.hasMCAPTopics())
+    {
+      //create header
+      let header = document.createElement("h2")
+      header.innerHTML = "MCAP Topics"
+      module_doc_div.appendChild(header)
+
+      //create list element
+      let ul = document.createElement("ul")
+
+      //get module mcap topics
+      let mcap_topics = module.getMCAPTopics()
+
+      //append topics to list
+      mcap_topics.forEach(topic => {
+        let li = document.createElement("li")
+        li.textContent = topic
+        ul.appendChild(li)
+      })
+
+      //append topics list to documentation div
+      module_doc_div.appendChild(ul)
+    }
+
+    //append module documentation
+    let documentation_div = document.createElement("div")
+    documentation_div.innerHTML = this.model.getModuleDocumentation()
+    module_doc_div.appendChild(documentation_div)
   }
 
   onPreviewDataChanged()
@@ -1052,6 +1210,7 @@ class View
     if(table.querySelector('thead') == null)
     {
       let header_checkbox = this.createCheckBox([], false)
+      header_checkbox.id = this.getNextFormIDString()
       header_checkbox.addEventListener("click", event => this.onMeasurementHeaderCheckbox(event), true);
       const header_styles = [{}, {}, {}, {}, {}, {}, {}, {}, {}]
       const header_labels = [header_checkbox, "Date", "Run Tag", "Run ID", "Duration", "Total Size", "Modules", "Download", "Remove"]
@@ -1104,6 +1263,7 @@ class View
 
         //select checkbox
         let checkbox = this.createCheckBox([["measurement-name", m.getName()]], m.getSelected())
+        checkbox.id = this.getNextFormIDString()
         checkbox.addEventListener("click", event => this.onMeasurementCheckboxClick(event), true);
 
         //insert cells
@@ -1222,6 +1382,8 @@ class View
 
   createConfigForms(forms_div, config_entries)
   {
+    let nowrap = this.model.getConfigLayout() == "nowrap"
+
     //interate config entries
     for(let i = 0; i < config_entries.length; i++)
     {
@@ -1275,36 +1437,34 @@ class View
           continue
         }
 
+        // get max digits for all array entries
         let max_digits = entry.getMaxArrayEntryDigits()
-        let split = 4
-        if(max_digits > 1) split = 3
-        if(max_digits > 4) split = 2
-        if(max_digits > 10) split = 1
 
         let elements_div = document.createElement("div")
-        elements_div.setAttribute("class", "config-forms-horizontal")
+        elements_div.className = "cfg-array"
+        if(nowrap) elements_div.style.flexWrap = "nowrap" 
+        if(nowrap) elements_div.style.flexDirection = "column" 
         if(array.length > 0) entry_div.appendChild(elements_div)
 
         for(let j = 0; j < array.length; j++)
         {
-          if(j % split == 0 && j != 0)
-          {
-            elements_div = document.createElement("div")
-            elements_div.setAttribute("class", "config-forms-horizontal")
-            entry_div.appendChild(elements_div)
-          }
-
+          //create input
           let input = document.createElement("INPUT")
           input.setAttribute("class", "config-form")
           input.setAttribute("config-index", entry.getIndex().toString())
           input.setAttribute("array-index", j.toString())
-          input.id = "cfb" + i.toString() + "_" + j.toString()
+          input.id = this.getNextFormIDString()
 
-          let label = document.createElement("LABEL");
-          label.setAttribute("for",input.id);
+          //create label div
+          let label = document.createElement("div")
+          label.className = "cfg-array-label"
           label.innerHTML = j.toString() + ":";
-          label.setAttribute("class", "config-form-label")
-          elements_div.appendChild(label);
+
+          //create item div (label + input)
+          let item_div = document.createElement("div")
+          item_div.className = "cfg-array-item"
+          item_div.appendChild(label)
+          elements_div.appendChild(item_div);
 
           if(entry.getType() == "string")
           {
@@ -1314,7 +1474,7 @@ class View
               let select = document.createElement("SELECT");
               select.setAttribute("config-index", entry.getIndex().toString())
               select.setAttribute("array-index", j.toString())
-              select.id = "cfb" + i.toString() + "_" + j.toString()
+              select.id = this.getNextFormIDString()
 
               //define available fill options
               let fill_options = entry.getProperties()["options"]
@@ -1330,7 +1490,7 @@ class View
               }
 
               select.addEventListener("change", event => this.onSubmitConfigInputText(event), true);
-              elements_div.appendChild(select)
+              item_div.appendChild(select)
             }
             else
             {
@@ -1338,7 +1498,8 @@ class View
               input.value = array[j]
               input.addEventListener("submit", event => this.onSubmitConfigInputText(event), true);
               input.addEventListener("change", event => this.onSubmitConfigInputText(event), true);
-              elements_div.appendChild(input)
+              if(!nowrap) item_div.style.flex = "1 1 " + (max_digits + 4).toString() + "ch"
+              item_div.appendChild(input)
             }
           }
 
@@ -1348,7 +1509,8 @@ class View
             input.value = array[j]
             input.addEventListener("submit", event => this.onSubmitConfigInputNumber(event), true);
             input.addEventListener("change", event => this.onSubmitConfigInputNumber(event), true);
-            elements_div.appendChild(input)
+            if(!nowrap) item_div.style.flex = "1 1 " + (max_digits + 4).toString() + "ch"
+            item_div.appendChild(input)
           }
 
           if(entry.getType() == "boolean")
@@ -1356,14 +1518,16 @@ class View
             input.setAttribute("type", "checkbox")
             input.checked = array[j]
             input.addEventListener("click", event => this.onSubmitConfigInputChecked(event), true);
-            elements_div.appendChild(input)
+            if(!nowrap) item_div.style.width = "7ch"
+            if(!nowrap) item_div.style.justifyContent = "end"
+            item_div.appendChild(input)
           }
         }
 
         if(array.length == 0)
         {
             let array_buttons_div = document.createElement("div")
-            array_buttons_div.setAttribute("class", "config-forms-horizontal")
+            array_buttons_div.setAttribute("class", "cfg-array-buttons")
             entry_div.appendChild(array_buttons_div)
 
             var init_string_button = document.createElement("BUTTON");
@@ -1395,7 +1559,7 @@ class View
           if(entry.hasPropertyFlag("resizeable"))
           {
             let array_buttons_div = document.createElement("div")
-            array_buttons_div.setAttribute("class", "config-forms-horizontal")
+            array_buttons_div.setAttribute("class", "cfg-array-buttons")
             entry_div.appendChild(array_buttons_div)
 
             var add_array_button = document.createElement("BUTTON");
@@ -1421,6 +1585,7 @@ class View
         {
           //create fill method select dropdown
           let select = document.createElement("SELECT");
+          select.id = this.getNextFormIDString()
           select.setAttribute("config-index", entry.getIndex().toString())
 
           //define available fill options
@@ -1442,6 +1607,7 @@ class View
         else
         {
           let input = document.createElement("INPUT")
+          input.id = this.getNextFormIDString()
           input.setAttribute("class", "config-form")
           input.setAttribute("config-index", entry.getIndex().toString())
 
@@ -1492,7 +1658,7 @@ class View
             //create entry div
             let sub_entry_div = document.createElement("div")
             sub_entry_div.id = "sub_cfg_" + entry.getIndex().toString()
-            sub_entry_div.setAttribute("class", "config-entry-div")
+            sub_entry_div.setAttribute("class", "cfg-object")
             sub_entry_div.style.marginLeft = "20px"
             sub_entry_div.style.display = entry.getSubVisible() ? "flex" : "none"
             entry_div.appendChild(sub_entry_div)
@@ -1573,14 +1739,23 @@ class View
   onSubmitConfigInputNumber(event)
   {
     console.log("View:onSubmitConfigInputNumber()")
+
+    let value = parseFloat(event.currentTarget.value)
+
+    if(isNaN(value))
+    {
+      value = 0
+      event.currentTarget.value = "0"
+    }
+
     let config_index = parseInt(event.currentTarget.getAttribute("config-index"))
 
     if(event.currentTarget.hasAttribute("array-index")){
       let array_index = parseInt(event.currentTarget.getAttribute("array-index"))
-      this.model.updateConfigEntry(config_index, array_index, parseFloat(event.currentTarget.value))
+      this.model.updateConfigEntry(config_index, array_index, value)
     }
     else{
-      this.model.updateConfigEntry(config_index, -1, parseFloat(event.currentTarget.value))
+      this.model.updateConfigEntry(config_index, -1, value)
     }
   }
 
@@ -1604,6 +1779,19 @@ class View
     this.controller.onPostConfigButtonClick(config_key)
   }
 
+  onConfigLayoutButtonClick(event)
+  {
+    this.model.toggleConfigLayout()
+    this.updateConfigLayoutButton()
+  }
+
+  updateConfigLayoutButton()
+  {
+    //toggle emoji
+    let button = document.getElementById("config_layout_button_id")
+    button.innerHTML = this.model.getConfigLayout() == "nowrap" ? "&#128203;" : "&#128230;"
+  }
+
   onSimpleConfigButtonClick(event)
   {
     console.log("View::onSimpleConfigButtonClick()")
@@ -1612,6 +1800,7 @@ class View
     let shadow = '0px 0px 2px 2px var(--heading_color) inset'
     document.getElementById('simple_config_button_id').style.boxShadow = shadow
     document.getElementById('advanced_config_button_id').style.boxShadow = ''
+    document.getElementById("config_layout_button_id").style.display = ""
   }
 
   onAdvancedConfigButtonClick(event)
@@ -1622,6 +1811,7 @@ class View
     let shadow = '0px 0px 2px 2px var(--heading_color) inset'
     document.getElementById('simple_config_button_id').style.boxShadow = ''
     document.getElementById('advanced_config_button_id').style.boxShadow = shadow
+    document.getElementById("config_layout_button_id").style.display = "none"
   }
 
   onApplyConfigButtonClick(event)
@@ -1714,5 +1904,11 @@ class View
     else{
       document.getElementById("db_header_logo_img").src = "../static/images/db_logo_1.png"
     }
+  }
+
+  getNextFormIDString()
+  {
+    this.form_id_counter += 1
+    return "form-" + this.form_id_counter.toString()
   }
 }

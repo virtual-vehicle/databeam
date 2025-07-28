@@ -1,0 +1,10 @@
+[requires]
+pybind11/[>=2.12.0]
+mcap/[>=2.0.0]
+rapidjson/cci.20230929
+
+[tool_requires]
+
+[generators]
+CMakeDeps
+CMakeToolchain

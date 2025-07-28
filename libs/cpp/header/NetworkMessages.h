@@ -110,9 +110,12 @@ class ModuleDataConfig
 {
 public:
     ModuleDataConfig(){}
-    ModuleDataConfig(bool enable_capturing, bool enable_live_all_samples, bool enable_live_fixed_rate, float live_rate_hz);
+    ModuleDataConfig(bool capturing_available, bool live_available, 
+        bool enable_capturing, bool enable_live_all_samples, bool enable_live_fixed_rate, float live_rate_hz);
 
-    bool enable_capturing = false;
+    bool capturing_available = true;
+    bool live_available = true;
+    bool enable_capturing = true;
     bool enable_live_all_samples = false;
     bool enable_live_fixed_rate = false;
     float live_rate_hz = 1.0f;
@@ -303,4 +306,17 @@ public:
 
     std::vector<std::string> db_id_list;
     std::vector<std::string> hostname_list;
+};
+
+// ===========================================================================
+// ModuleLatestQuery
+// ===========================================================================
+
+class ModuleLatestQuery
+{
+public:
+    ModuleLatestQuery(){};
+    void deserialize(std::string json_str);
+
+    int schema_index = 0;
 };

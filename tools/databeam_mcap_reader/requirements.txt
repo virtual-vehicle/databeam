@@ -1,0 +1,5 @@
+-i https://pypi.org/simple
+numpy
+mcap
+orjson
+requests

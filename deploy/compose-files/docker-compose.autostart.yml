@@ -1,6 +1,6 @@
 services:
   autostart:
-    image: ${DOCKER_TAG_PREFIX}_module_autostart:${DEPLOY_VERSION}
+    image: ${DOCKER_TAG_PREFIX}_system_autostart:${DEPLOY_VERSION}
     environment:
       - LOGLEVEL=DEBUG
       - CONFIG_DIR=${DB_CONFIG_DIRECTORY}

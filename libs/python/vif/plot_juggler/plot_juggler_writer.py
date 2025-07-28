@@ -69,8 +69,8 @@ class PlotJugglerWriter(LoggerMixin):
                 with open(module_meta_path, "r") as f:
                     meta_dict = json.load(f)
 
-                    if "mcap_topics" in meta_dict:
-                        for mcap_topic in meta_dict['mcap_topics']:
+                    if "_mcap_topics" in meta_dict:
+                        for mcap_topic in meta_dict['_mcap_topics']:
                             xml_str += self.create_plot_juggler_entry(measurement_name, m, mcap_topic)
             except Exception as e:
                 self.logger.error(f'loading meta ({module_meta_path}) failed ({type(e).__name__}): {e}\n'

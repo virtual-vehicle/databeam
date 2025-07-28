@@ -80,13 +80,13 @@ class SystemMonitor(IOModule):
         return psutil.cpu_count()
 
     def _get_core_temperatures(self):
-        result = {}
         temperatures = psutil.sensors_temperatures()
+        coretemp = {}
         if 'coretemp' in temperatures:
-            result['coretemp'] = {}
-            for i, item in enumerate(temperatures['coretemp']):
-                result['coretemp'][f"temp_{i}"] = item.current
-        return result
+            coretemp = {f"temp_{i}": item.current for i, item in enumerate(temperatures['coretemp'])}
+        elif 'cpu_thermal' in temperatures:
+            coretemp = {f"temp_{i}": item.current for i, item in enumerate(temperatures['cpu_thermal'])}
+        return {'coretemp': coretemp}
 
     def _get_num_core_temperatures(self):
         return len(self._get_core_temperatures()['coretemp'].keys())

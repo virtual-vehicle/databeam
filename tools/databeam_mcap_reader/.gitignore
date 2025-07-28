@@ -1,0 +1,8 @@
+build
+build_dev
+dist
+dist_temp
+CMakeCMakeUserPresets.json
+mcap_cli
+*.mcap
+*.bak

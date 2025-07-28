@@ -30,6 +30,12 @@ class Controller
 
   onWebSocketMessage(json_str)
   {
+    if(!this.model.getTabVisible())
+    {
+      //console.log("NOT VISIBLE")
+      return
+    }
+
     let msg = JSON.parse(json_str)
     let tokens = msg.type.split("/")
 

@@ -38,9 +38,6 @@ class UdpSink(IOModule):
 
         self.udp_manager = UdpManager()
 
-    def start(self):
-        self.logger.debug('starting')
-
     def stop(self):
         self._stop_thread()
         self.udp_manager.close()
@@ -176,36 +173,9 @@ class UdpSink(IOModule):
         self.logger.info('prepare sampling!')
         self._start_thread()
 
-    def command_start_sampling(self):
-        self.logger.info('start sampling!')
-
     def command_stop_sampling(self):
         self.logger.info('stop sampling!')
         self._stop_thread()
-
-    def command_prepare_capturing(self) -> None:
-        pass
-
-    def command_start_capturing(self) -> None:
-        pass
-
-    def command_stop_capturing(self) -> None:
-        pass
-
-    def command_get_meta_data(self) -> Dict[str, Union[str, int, float, bool]]:
-        return {}
-
-    def command_get_schemas(self) -> List[Dict]:
-        return [{
-            'type': 'object',
-            'properties': {
-                # TODO list all possible channel names and data types ('number', 'integer', 'string')
-                # 'my_channel': {'type': 'number'}
-            }
-        }]
-
-    def event_received(self, io_event: IOEvent) -> None:
-        self.logger.debug('event received: %s', io_event.json_data)
 
 
 if __name__ == '__main__':

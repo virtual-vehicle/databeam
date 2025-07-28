@@ -11,6 +11,7 @@ from copy import deepcopy
 from vif.logger.logger import LoggerMixin
 from vif.data_interface.base_config import BaseConfig
 
+NR_BACKUP_CONFIGS = 100
 
 class ConfigHandler(LoggerMixin):
     def __init__(self, *args, config_type: Type[BaseConfig], **kwargs):
@@ -68,7 +69,7 @@ class ConfigHandler(LoggerMixin):
             # only write if config has changed
             if write_config:
                 self._config_type.json_to_disk(self._config_dir, self._config_filename, self._config)
-                self.backup_timestamped_config(files_to_keep=10)
+                self.backup_timestamped_config(files_to_keep=NR_BACKUP_CONFIGS)
 
     def backup_timestamped_config(self, files_to_keep: int):
         """

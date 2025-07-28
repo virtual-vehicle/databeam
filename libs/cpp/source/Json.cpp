@@ -64,15 +64,18 @@ std::string Json::getString(std::string key)
     return document[key.c_str()].GetString();
 }
 
-bool Json::getBool(std::string key)
+bool Json::getBool(std::string key, bool default_value)
 {
-    return document[key.c_str()].GetBool();
+    if (document.HasMember(key.c_str()))
+        return document[key.c_str()].GetBool();
+    else
+        return default_value;
 }
 
-bool Json::getNestedBool(std::string key)
+bool Json::getNestedBool(std::string key, bool default_value)
 {
     rapidjson::Value* v = rapidjson::Pointer(key.c_str()).Get(document);
-    if(v == nullptr) return false;
+    if(v == nullptr) return default_value;
     return v->GetBool();
 }
 

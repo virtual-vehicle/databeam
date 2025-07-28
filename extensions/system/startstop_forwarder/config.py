@@ -12,6 +12,7 @@ class StartstopForwarderConfig(BaseConfig):
     def _schema(cls) -> Mapping:
         cfg = ConfigFactory()
 
+        cfg.boolean('enable', True)
         cfg.string_array('follower_db_ids', ['dbid2']).resizeable().label('DB-IDs of Followers')
 
         return cfg.get_config()

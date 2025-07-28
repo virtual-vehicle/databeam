@@ -216,7 +216,7 @@ class Server(LoggerMixin):
     @flask_login.login_required
     def route_preview(self):
         data = request.json
-        self._preview_api.request_data(data['id'], data['module_name'])
+        self._preview_api.request_data(data['id'], data['module_name'], schema_index=data['schema_index'])
         return jsonify(data)
 
     @flask_login.login_required

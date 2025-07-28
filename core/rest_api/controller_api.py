@@ -23,7 +23,7 @@ from vif.data_interface.network_messages import (MeasurementState, ModuleRegistr
                                                  MeasurementInfo, MetaDataQueryCmd, MetaDataQuery,
                                                  MetaDataReply, SystemControlQuery, SystemControlReply,
                                                  SystemControlQueryCmd, ModuleConfigEvent, ModuleConfigEventReply,
-                                                 ModuleConfigEventCmd)
+                                                 ModuleConfigEventCmd, ModuleLatestQuery)
 
 
 class ControllerAPI(LoggerMixin):
@@ -72,9 +72,10 @@ class ControllerAPI(LoggerMixin):
         # return status with error
         return {'status': Status(True, title, message).get_dict()}
 
-    def get_module_latest(self, module):
+    def get_module_latest(self, module, schema_index: int = 0):
+        message = ModuleLatestQuery(schema_index=schema_index)
         try:
-            reply = self.cm.request(Key(self._databeam_id, f'm/{module}', 'get_latest'))
+            reply = self.cm.request(Key(self._databeam_id, f'm/{module}', 'get_latest'), message.serialize())
             if reply is not None:
                 json_str = reply.decode('utf-8')
                 return json_str
@@ -182,6 +183,13 @@ class ControllerAPI(LoggerMixin):
         except Exception as e:
             return self._handle_reply_exception(e, reply, "get_module_default_config_dict", module_name)
 
+    def get_module_meta_dict(self, module_name):
+        try:
+            reply = self.cm.request(Key(self._databeam_id, f'm/{module_name}', 'get_metadata'))
+            return json.loads(reply)
+        except:
+            return {}
+
     def get_modules_dict(self) -> dict:
         self.logger.debug('get_modules_dict')
         reply = None
@@ -201,12 +209,15 @@ class ControllerAPI(LoggerMixin):
 
         for m in modules['modules']:
             data_config = self.get_data_config_dict(m['name'])
+            module_meta = self.get_module_meta_dict(m['name'])
 
             if data_config['status']['error']:
                 return data_config
 
             if 'config' in data_config:
                 m.update(data_config['config'])
+
+            m.update({'module_meta': module_meta})
 
         return modules
 

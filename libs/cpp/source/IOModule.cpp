@@ -143,7 +143,7 @@ std::string IOModule::getMetaDataTemplate()
     }
 
     // write topics list to meta json
-    json_writer.write("mcap_topics", topics);
+    json_writer.write("_mcap_topics", topics);
 
     // write module config to metadata
     json_writer.write("config", Utils::replaceCharWithString(getConfig(), '\"', "\\\""));
