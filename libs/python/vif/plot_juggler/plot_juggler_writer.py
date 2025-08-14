@@ -25,7 +25,8 @@ plot_juggler_xml_header="""<?xml version='1.0' encoding='UTF-8'?>
  </tabbed_widget>
  <use_relative_time_offset enabled="0"/>
  <!-- - - - - - - - - - - - - - - -->
- <previouslyLoaded_Datafiles>"""
+ <previouslyLoaded_Datafiles>
+ """
 
 
 class PlotJugglerWriter(LoggerMixin):
@@ -60,8 +61,9 @@ class PlotJugglerWriter(LoggerMixin):
         for m in modules:
             module_meta_path = path / m / "module_meta.json"
 
-            # skip if there is no module meta json file
-            if not os.path.exists(module_meta_path):
+            # skip if there is no module meta json file or there is no mcap file
+            if (not os.path.exists(module_meta_path) or
+                    not any(f.startswith(m) and f.endswith('.mcap') for f in os.listdir(path / m))):
                 continue
 
             try:

@@ -5,7 +5,7 @@ import platform
 import subprocess
 import time
 import sys
-from typing import Optional, Iterator
+from typing import Optional, Iterator, List, Dict
 from pathlib import Path
 import logging
 
@@ -70,7 +70,7 @@ class McapTopic:
         self._mcap_path = mcap_path
         self._mcap_folder = mcap_path.parent
         self._topic_key = topic_key
-        self._topic = self._reader.get_summary().channels[topic_key].topic
+        self.topic = self._reader.get_summary().channels[topic_key].topic
         self._message_count = reader.get_summary().statistics.channel_message_counts[topic_key]
         # modulo value to update progress indicator
         self._message_count_mod = int(max(self._message_count / 100, 1))
@@ -93,6 +93,9 @@ class McapTopic:
             raise Exception("Unsupported message encoding: " + self._message_encoding)
         self._data = None
 
+    def get_numpy_dtypes(self):
+        return [self._np_dtype[d] for d in self._dtypes]
+
     def get_fields(self):
         return self._fields
 
@@ -114,7 +117,8 @@ class McapTopic:
         # print progress
         if cnt % self._message_count_mod == 0:
             percent_str = str(int((cnt / max_cnt) * 100)) + "%"
-            print("\r>> Loading " + self._topic + ": " + percent_str, end="", flush=True)
+            if logger.level == logging.DEBUG:
+                print("\r>> Loading " + self.topic + ": " + percent_str, end="", flush=True)
         return False
 
     def get_default_data(self, start_time_ns: int = 0, num_messages: int = -1):
@@ -135,7 +139,8 @@ class McapTopic:
                 data[k] = np.nan
 
         try:
-            ret_message = parse_mcap(data, str(self._mcap_path), self._topic, start_time_ns=start_time_ns)
+            ret_message = parse_mcap(data, str(self._mcap_path), self.topic, start_time_ns=start_time_ns,
+                                     quiet=False if logger.level == logging.DEBUG else True)
         except Exception as e:
             logger.error(f'ERROR: EX parse_mcap {type(e).__name__}: {e}')
             ret_message = None
@@ -144,7 +149,7 @@ class McapTopic:
             logger.warning(f'parse_mcap returned: "{ret_message}"')
             logger.info("Falling back to Python MCAP parsing ...")
             cnt = 0
-            for schema, channel, message in self._reader.iter_messages(topics=[self._topic], start_time=start_time_ns):
+            for schema, channel, message in self._reader.iter_messages(topics=[self.topic], start_time=start_time_ns):
                 data_dict = json.loads(message.data)
                 data['ts'][cnt] = message.publish_time
                 for k, v in data_dict.items():
@@ -170,7 +175,7 @@ class McapTopic:
         """
         window_size = 1
         # Get size of the first window to use for all windows in topic
-        for schema, channel, message in self._reader.iter_messages(topics=[self._topic]):
+        for schema, channel, message in self._reader.iter_messages(topics=[self.topic]):
             decoded_data = json.loads(message.data)
             window_size = len(decoded_data["rel_time"])
             break
@@ -187,7 +192,7 @@ class McapTopic:
         cnt = 0
 
         # iterate messages up to num_messages
-        for schema, channel, message in self._reader.iter_messages(topics=[self._topic], start_time=start_time_ns):
+        for schema, channel, message in self._reader.iter_messages(topics=[self.topic], start_time=start_time_ns):
             # parse json data
             data_dict = json.loads(message.data)
             data_len = len(data_dict["rel_time"])
@@ -213,17 +218,18 @@ class McapTopic:
         if self._data is not None and start_time_ns == 0 and num_messages == -1:
             return self._data
 
-        logger.info(f'Loading {str(num_messages) if num_messages > 0 else 'all '} messages from "{self._topic}"')
+        logger.info(f'Loading {str(num_messages) if num_messages > 0 else "all "} messages from "{self.topic}"')
         start_time = time.time()
         # create numpy structured array holding fields and timestamp
-        if "oscilloscope" in self._topic:
+        if "oscilloscope" in self.topic:
             parsed_data = self.get_oscilloscope_data(start_time_ns=start_time_ns, num_messages=num_messages)
         else:
             parsed_data = self.get_default_data(start_time_ns=start_time_ns, num_messages=num_messages)
 
         # finished loading
-        print('')  # clear the ">> Loading" line
-        logger.info(f'Loaded "{self._topic}": 100% in {(time.time() - start_time):.2f} seconds.')
+        if logger.level == logging.DEBUG:
+            print('')  # clear the ">> Loading" line
+        logger.info(f'Loaded "{self.topic}": 100% in {(time.time() - start_time):.2f} seconds.')
 
         # return data dict
         if start_time_ns == 0 and num_messages == -1:
@@ -350,14 +356,17 @@ class McapReader:
 
     def get_structure(self):
         s = {}
-        for topic in self.get_topics():
+        for topic in self.get_topic_names():
             s[topic] = {'fields': self._mcap_topics[self._topic_lut[topic]].get_fields(),
                         'dtypes': self._mcap_topics[self._topic_lut[topic]].get_dtypes(),
                         'message_count': self._mcap_topics[self._topic_lut[topic]].get_message_count()}
         return s
 
-    def get_topics(self):
+    def get_topic_names(self) -> List[str]:
         return [x for x in self._topic_lut.keys()]
+
+    def get_topics(self) -> Dict[str, McapTopic]:
+        return {topic.topic: topic for topic in self._mcap_topics.values()}
 
     def get_total_message_count(self):
         return self._reader.get_summary().statistics.message_count
@@ -371,19 +380,19 @@ class McapReader:
 
     def get_all_data(self):
         data = {}
-        for topic in self.get_topics():
+        for topic in self.get_topic_names():
             data[topic] = self.get_data(topic)
         return data
 
     def get_data_chunked(self, topic: str, chunk_size_megabytes: int) -> Iterator:
         return self._mcap_topics[self._topic_lut[topic]].get_data_chunked(chunk_size_megabytes)
 
-    def print_info(self) -> str:
+    def get_info_string(self) -> str:
         info = "MCAP Info:\n"
         info += "  Total Messages: " + str(self.get_total_message_count()) + "\n"
         info += "  Topics:\n"
 
-        for topic in self.get_topics():
+        for topic in self.get_topic_names():
             try:
                 t = self._mcap_topics[self._topic_lut[topic]]
                 info += "    " + topic + ":\n"
@@ -393,27 +402,32 @@ class McapReader:
             except KeyError:
                 info += "    " + topic + ":\n"
                 info += "      Messages: 0\n"
-
-        print(info)
         return info
 
 
 if __name__ == '__main__':
     # logging.basicConfig(level=logging.DEBUG)
-    logging.basicConfig(format='%(asctime)s %(levelname)-7s | %(message)s', level=logging.DEBUG)
+    loglevel = logging.DEBUG
+    logging.basicConfig(format='%(asctime)s %(levelname)-7s | %(message)s', level=loglevel)
+    logger.setLevel(loglevel)
 
     # open mcap file and print info
     mcap_reader = McapReader()
-    mcap_reader.open("../../testdata_multi_measurement/dummy_json.mcap")
-    mcap_reader.print_info()
+    # mcap_reader.open("../../testdata_multi_measurement/dummy_json.mcap")
+    mcap_reader.open("../../testdata_multi_measurement/dummy_small_json.mcap")
+    print(mcap_reader.get_info_string())
+    mcap_reader.get_total_message_count()
+    mcap_reader.get_structure()
+    mcap_reader.get_topic_names()
+    mcap_reader.get_topics()
 
     # get data
     # module_data = mcap_reader.get_data("testtopic")
-    # module_data = mcap_reader.get_all_data()
+    module_data = mcap_reader.get_all_data()
 
     # module_data = mcap_reader.get_data("testtopic", start_time_ns=0, num_messages=-1)
 
-    topic_name = next(iter(mcap_reader.get_structure()))  # get first module name / topic
+    topic_name = mcap_reader.get_topic_names()[0]  # get first module name / topic
     logger.info(f'Loading topic "{topic_name}"')
     loaded_messages = 0
     for chunk in mcap_reader.get_data_chunked(topic_name, chunk_size_megabytes=100):

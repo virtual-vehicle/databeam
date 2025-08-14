@@ -1,9 +1,10 @@
 """
 Constant Publisher
 """
+import random
 import threading
 import traceback
-from typing import Optional, Dict, Union, List
+from typing import Optional, Dict, List
 import time
 
 import environ
@@ -11,11 +12,10 @@ import environ
 from vif.data_interface.module_interface import main
 from vif.data_interface.io_module import IOModule
 from vif.data_interface.module_meta_factory import ModuleMetaFactory
+from vif.data_interface.network_messages import Status
 from vif.asyncio_helpers.asyncio_helpers import tick_generator
 
 from io_modules.constant_publisher.config import ConstantPublisherConfig
-
-from vif.data_interface.network_messages import Status
 
 
 @environ.config(prefix='')
@@ -45,12 +45,16 @@ class ConstantPublisher(IOModule):
     def _worker_thread_fn(self):
         self.logger.debug('worker thread running')
         g = tick_generator(self.config_handler.config['sleep_seconds'], drop_missed=True, time_source=time.time)
+        random_deviation = self.config_handler.config['random_deviation']
         try:
             while not self._thread_stop_event.is_set():
                 data = {}
-                for d in self.constant_data.values():
+                for d_type, d in self.constant_data.items():
                     for k, v in d.items():
-                        data[k] = v
+                        if d_type == 'random':
+                            data[k] = random.uniform(v - random_deviation, v + random_deviation)
+                        else:
+                            data[k] = v
                 self.data_broker.data_in(time.time_ns(), data)
                 # wait for timeout or killed thread
                 self._thread_stop_event.wait(timeout=next(g))
@@ -86,7 +90,7 @@ class ConstantPublisher(IOModule):
             self._thread_handling_lock.release()
 
     def command_validate_config(self, config) -> Status:
-        for x in config['strings'] + config['floats'] + config['integers']:
+        for x in config['strings'] + config['floats'] + config['integers'] + config['random_floats']:
             if '#' in x and '=' in x:
                 self.logger.error(f"config rejected: multiple separators (#=): {x}")
                 return Status(error=True, title='Invalid config', message=f'invalid: {x}')
@@ -115,7 +119,6 @@ class ConstantPublisher(IOModule):
                     self.logger.warning(f"config warning: duplicated key: {_key} (value: {_value})")
                     # TODO self._data_interface.log_gui("Const-Pub Config", "Duplicated key!")
                 _data[_key] = _value
-                return _data
 
             # make sure thread re-spawn is not intercepted
             with self._thread_handling_lock:
@@ -126,6 +129,7 @@ class ConstantPublisher(IOModule):
                         'string': {},
                         'number': {},
                         'integer': {},
+                        'random': {}
                     }
                     for s in config['strings']:
                         _add_value(new_constant_data['string'], *s.split('#' if '#' in s else '='))
@@ -135,6 +139,9 @@ class ConstantPublisher(IOModule):
                     for i in config['integers']:
                         key, value = i.split('#' if '#' in i else '=')
                         _add_value(new_constant_data['integer'], key, int(value))
+                    for rf in config['random_floats']:
+                        key, value = rf.split('#' if '#' in rf else '=')
+                        _add_value(new_constant_data['random'], key, float(value))
                 except Exception as e:
                     self.logger.error(f"config rejected: {type(e).__name__}: {e}")
                     # TODO self._data_interface.log_gui("Const-Pub Config Error", type(e).__name__)

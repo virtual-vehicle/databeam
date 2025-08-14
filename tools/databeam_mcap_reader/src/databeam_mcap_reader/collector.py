@@ -162,14 +162,14 @@ if __name__ == "__main__":
 
     # fetch data from single module/MCAP
     # reader = collector.get_mcap_reader(module=structure['2025-03-17_14-30-29.499_75_xyz'].modules['MyModule'])
-    # reader.print_info()
+    # reader.get_info_string()
     # module_data = reader.get_all_data()
 
     # fetch data from all modules in a measurement
     for module in collector.get_measurement_by_name('2025-03-17_14-30-29.499_75_xyz').modules.values():
         reader = collector.get_mcap_reader(module)
         reader.get_all_data()
-        # reader.print_info()
+        # reader.get_info_string()
 
     # TODO:
     # fetch data from all measurements in structure for certain module

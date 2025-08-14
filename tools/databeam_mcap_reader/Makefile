@@ -41,7 +41,7 @@ docker_wheels: clean-wheel
 _prompt:
 	@printf "\nPython version to be used: <$(PYTHON_DEV_EXECUTABLE)> version: <$(PYTHON_DEV_EXECUTABLE_VERSION)>\n\n"
 	@printf "Specify by calling:\n    PYTHON_USED=python3.12 make dev\n\n"
-	@printf "Debug output: $(DEV_DEBUG)\n\n"
+	@printf "Debug output (DEV_DEBUG): $(DEV_DEBUG)\n\n"
 	@bash -c "read -n 1 -p \"(abort with CTRL+C, continue with Return)\" foo"
 
 # Build development C++ extension

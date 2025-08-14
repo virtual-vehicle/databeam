@@ -94,8 +94,10 @@ std::unordered_map<std::string, field_details> get_field_details(const py::dtype
 /// @param py_array numpy structured array, initialized in python
 /// @param mcap_path path to the mcap file
 /// @param topic only parse messages of this topic
+/// @param quiet don't print anything
 /// @return empty string on success, error message on failure
-std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string topic, uint64_t start_time_ns)
+std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string topic, uint64_t start_time_ns,
+                       bool quiet)
 {
 #if DEBUG_OUTPUT
     std::cout << "ARG mcap_path: " << mcap_path << std::endl;
@@ -130,7 +132,9 @@ std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string t
     {
         const auto res = reader.open(mcap_path);
         if (!res.ok()) {
-            std::cerr << "ERROR: " << res.message << std::endl;
+            if (!quiet) {
+                std::cerr << "ERROR: " << res.message << std::endl;
+            }
             return "failed to open mcap file";
         }
     }
@@ -142,8 +146,10 @@ std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string t
         return _topic == topic;
     };
 
-    mcap::ProblemCallback problemCallback = [](const mcap::Status& status) {
-        std::cerr << "ERROR parse-problem: " << status.message << std::endl;
+    mcap::ProblemCallback problemCallback = [quiet](const mcap::Status& status) {
+        if (!quiet) {
+            std::cerr << "ERROR parse-problem: " << status.message << std::endl;
+        }
     };
 
     mcap::LinearMessageView messageView = reader.readMessages(problemCallback, options);
@@ -159,14 +165,18 @@ std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string t
         // skip any non-json-encoded messages.
         if (it->channel->messageEncoding != "json")
         {
-            std::cerr << "not a JSON message: " << it->channel->messageEncoding << std::endl;
+            if (!quiet) {
+                std::cerr << "not a JSON message: " << it->channel->messageEncoding << std::endl;
+            }
             continue;
         }
 
         rapidjson::Document doc;
         if (doc.Parse(reinterpret_cast<const char *>(it->message.data), it->message.dataSize).HasParseError())
         {
-            std::cerr << "JSON parse error of message: " << it->message.data << std::endl;
+            if (!quiet) {
+                std::cerr << "JSON parse error of message: " << it->message.data << std::endl;
+            }
             return std::string("JSON parse error in message ") + std::to_string(cnt);
         }
 
@@ -216,6 +226,7 @@ std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string t
                     // std::cout << "field: " << field << " bytes: " << value.GetString() << " len: " << len << " size: " << value.GetStringLength() << std::endl;
                     if (value.GetStringLength() < len) {
                         len = value.GetStringLength();
+
                     }
                     std::memcpy(row_ptr + details_it->second.offset, myvar, len);
                 }
@@ -223,7 +234,9 @@ std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string t
             
             case field_type::UNKNOWN:
             default:
-                std::cout << "ERROR: unknown type: " << value.GetType() << " for field: " << field << std::endl;
+                if (!quiet) {
+                    std::cout << "ERROR: unknown type: " << value.GetType() << " for field: " << field << std::endl;
+                }
                 break;
             }
         }
@@ -232,14 +245,18 @@ std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string t
         // print progress
         if (cnt % mod == 0) {
             int percent = static_cast<int>((static_cast<double>(cnt) / num_rows) * 100);
-            std::cout << "\r>> Loading " << topic << ": " << percent << "%" << std::flush;
+            if (!quiet) {
+                std::cout << "\r>> Loading " << topic << ": " << percent << "%" << std::flush;
+            }
         }
         if (cnt >= num_rows) {
             break;
         }
     }
     reader.close();
-    std::cout << "\rLoading " << topic << ": 100% -> loaded " << cnt << " rows of " << num_rows << std::endl;
+    if (!quiet) {
+        std::cout << "\rLoading " << topic << ": 100% -> loaded " << cnt << " rows of " << num_rows << std::endl;
+    }
 
 #if DEBUG_OUTPUT
     std::clock_t end_cpu = std::clock();
@@ -247,9 +264,10 @@ std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string t
 
     double wall_ms = std::chrono::duration<double>(end_wall - start_wall).count();
     double cpu_ms = (double)(end_cpu - start_cpu) / CLOCKS_PER_SEC;
-
-    std::cout << ">> Wall time: " << wall_ms << " s" << std::endl;
-    std::cout << ">> CPU time: " << cpu_ms << " s" << std::endl;
+    if (!quiet) {
+        std::cout << ">> Wall time: " << wall_ms << " s" << std::endl;
+        std::cout << ">> CPU time: " << cpu_ms << " s" << std::endl;
+    }
 #endif
 
     return "";
@@ -260,7 +278,8 @@ PYBIND11_MODULE(_core, m)
     m.doc() = "parse mcap file and decode JSON messages";
 
     m.def("parse_mcap", &parse_mcap, "parse mcap file and decode JSON messages",
-          py::arg("py_array"), py::arg("mcap_path"), py::arg("topic"), py::arg("start_time_ns") = 0);
+          py::arg("py_array"), py::arg("mcap_path"), py::arg("topic"), py::arg("start_time_ns") = 0,
+          py::arg("quiet") = false);
 
 #ifdef VERSION_INFO
     m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);

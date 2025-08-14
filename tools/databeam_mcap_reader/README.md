@@ -25,16 +25,16 @@ reader.open('path/to/file.mcap')
 #### Fetch details about the file:
 ```
 # print infos
-reader.print_info()
+print(reader.get_info_string())
 
-# dict of topics with field names and data-types
-reader.get_structure()
+# dict of topics with field names, data-types and message counts
+structure = reader.get_structure()
 
-# list of topics
-reader.get_topics()
+# list of topic names
+topics = reader.get_topic_names()
 
 # total number of messages
-reader.get_message_count()
+count = reader.get_total_message_count()
 ```
 
 #### Fetch data from a specific topic:
@@ -66,7 +66,7 @@ for chunk in mcap_reader.get_data_chunked("testtopic", chunk_size_megabytes=1000
 #### Use matplotlib to plot data:
 ```
 import matplotlib.pyplot as plt
-for topic_name in mcap_reader.get_topics():
+for topic_name in mcap_reader.get_topic_names():
     data = mcap_reader.get_data(topic_name)
     fields = mcap_reader.get_structure()[topic_name]['fields']
     dtypes = mcap_reader.get_structure()[topic_name]['dtypes']

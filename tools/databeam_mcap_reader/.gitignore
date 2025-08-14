@@ -6,3 +6,4 @@ CMakeCMakeUserPresets.json
 mcap_cli
 *.mcap
 *.bak
+*.so

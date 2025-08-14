@@ -350,9 +350,9 @@ class ModuleInterface(LoggerMixin):
                 for k, v in default.items():
                     if k not in new_cfg:
                         new_cfg[k] = v
-                for k, v in new_cfg.items():
+                for k in list(new_cfg.keys()):
                     if k not in default:
-                        new_cfg.pop(k)
+                        v = new_cfg.pop(k)
                         logger.warning(f'removed invalid key: {k} with value {v}')
 
                 # validate new config via json-schema

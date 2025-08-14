@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "databeam-mcap-reader"
-version = "0.2.0"
+version = "0.2.1"
 description = "MCAP file reader for JSON data implemented in C++ and Python."
 requires-python = ">=3.10"
 readme = "README.md"

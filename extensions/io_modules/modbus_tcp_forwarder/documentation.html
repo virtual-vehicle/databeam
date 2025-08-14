@@ -1,0 +1,16 @@
+<h2>Description</h2>
+<p>
+    Forward configured channels as a Modbus TCP server.
+</p>
+
+<h2>Configuration</h2>
+<ul>
+  <li><b>TCP Port:</b> Port to listen on</li>
+  <li><b>Inputs:</b> Add subscriber channels in format module/topic/sub_mode#channel=register.<br>
+  sub_mode may be "liveall" or "livedec".<br>
+  Registers are integers for 16-bit values - mind that 32-bit values also occupy the next register.</li>
+  <li><b>Input DBIDs:</b> Optional list of DBIDs when connecting to external DataBeam instances</li>
+</ul>
+
+<h2>Known Issues</h2>
+None.

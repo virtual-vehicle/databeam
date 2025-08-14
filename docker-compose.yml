@@ -69,6 +69,7 @@ include:
   # - deploy/compose-files/docker-compose.filter.yml
   # - deploy/compose-files/docker-compose.gps_time_service.yml
   # - deploy/compose-files/docker-compose.math_processor.yml
+  # - deploy/compose-files/docker-compose.modbus_tcp_forwarder.yml
   # - deploy/compose-files/docker-compose.nmea_gnss.yml
   # - deploy/compose-files/docker-compose.pid_controller.yml
   # - deploy/compose-files/docker-compose.ping.yml
