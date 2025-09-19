@@ -81,14 +81,17 @@ class MetaDataReply:
 
 
 class GetSchemasReply:
-    def __init__(self, topic_names: dict):
-        self.topic_names = topic_names
+    def __init__(self, schema_dict: dict):
+        self._schema_dict = schema_dict
 
     def get_topic_names_list(self) -> List[str]:
-        return self.topic_names["topic_names"]
+        return list(self._schema_dict.keys())
+
+    def get_schema_dict(self):
+        return self._schema_dict
 
     def serialize(self) -> str:
-        return json.dumps(self.topic_names)
+        return json.dumps(self._schema_dict)
 
     @classmethod
     def deserialize(cls, json_str: Union[str, bytes]) -> Self:

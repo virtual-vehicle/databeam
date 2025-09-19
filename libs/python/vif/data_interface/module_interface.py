@@ -39,9 +39,11 @@ from vif.data_interface.network_messages import (MeasurementState, ModuleRegistr
 
 @environ.config(prefix='')
 class ModuleInterfaceEnv:
-    LOGLEVEL = environ.var(help='logging level', default='INFO')
-    CONFIG_DIR = environ.var(help='config directory without deploy version', converter=lambda x: Path(x).expanduser())
-    DATA_DIR = environ.var(help='data directory without deploy version', converter=lambda x: Path(x).expanduser())
+    LOGLEVEL = environ.var(help='logging level', default='DEBUG')
+    CONFIG_DIR = environ.var(help='config directory without deploy version', converter=lambda x: Path(x).expanduser(),
+                             default='/opt/databeam/config')
+    DATA_DIR = environ.var(help='data directory without deploy version', converter=lambda x: Path(x).expanduser(),
+                           default='/opt/databeam/data')
     DEPLOY_VERSION = environ.var(help='docker images tag', default='latest')
     DB_ID = environ.var(help='DataBeam domain name for communication', default='db')
     DB_ROUTER = environ.var(help='DataBeam router hostname to find other nodes', default='localhost')
@@ -110,6 +112,9 @@ class ModuleInterface(LoggerMixin):
             enable_live_all_samples=False,
             enable_live_fixed_rate=False,
             live_rate_hz=1)
+
+    def get_connection_manager(self) -> ConnectionManager:
+        return self.cm
 
     def log_gui(self, message: str, log_severity=logging.DEBUG) -> None:
         if log_severity > logging.NOTSET:
@@ -652,13 +657,13 @@ class ModuleInterface(LoggerMixin):
     def __cb_get_schemas(self, data: bytes) -> str | bytes:
         try:
             schemas = self.module.command_get_schemas()
-            schema_list = []
+            schema_dict = {}
             for schema in schemas:
                 if "topic" in schema:
-                    schema_list.append(schema["topic"])
+                    schema_dict[schema["topic"]] = schema['properties']
                 else:
-                    schema_list.append(self.module.name)
-            return GetSchemasReply({"topic_names": schema_list}).serialize()
+                    schema_dict[self.module.name] = schema['properties']
+            return GetSchemasReply(schema_dict).serialize()
         except Exception as e:
             self.__logger.error(f'__cb_get_schemas ({type(e).__name__}): {e}\n{traceback.format_exc()}')
             return "{}".encode('utf-8')

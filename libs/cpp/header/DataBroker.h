@@ -57,8 +57,8 @@ private:
     std::string db_id = "default";
     std::string module_name = "default";
     Logger* logger = nullptr;
-    std::string all_topic = "";  // e.g. "db_debug/m/module_name/liveall"
-    std::string fixed_topic = "";  // e.g. "db_debug/m/module_name/livedec"
+    std::string all_topic = "";  // e.g. "db/m/module_name/liveall"
+    std::string fixed_topic = "";  // e.g. "db/m/module_name/livedec"
     std::vector<std::string> schema_all_topics;
     std::vector<std::string> schema_fixed_topics;
     mcap::McapWriter* mcap_writer = nullptr;

@@ -201,6 +201,12 @@ For more details, please consult the **<a href="doc/DEPLOYMENT.md">deployment do
 
 ## DAQ Data Post-Processing
 
+### DataBeam MCAP Reader Python Package
+Our Python package on PyPI: https://pypi.org/project/databeam-mcap-reader/
+
+A high performance DataBeam-MCAP parser - implemented in C++. See PyPI page for more details.
+
+
 ### MCAP tooling
 
 #### Official
@@ -208,7 +214,6 @@ For more details, please consult the **<a href="doc/DEPLOYMENT.md">deployment do
   - CLI tools: https://github.com/foxglove/mcap/releases?q=mcap-cli
 
 ##### Examples
-
 Quickly inspect data as JSON:\
 `mcap-linux-amd64 cat Ping.mcap --json`
 
@@ -226,7 +231,6 @@ Merge multiple MCAP files:\
 
 And more ...
 
-
 #### Viewers
 * PlotJuggler: https://plotjuggler.io/
   - very good for quick plotting of numeric data
@@ -236,14 +240,12 @@ And more ...
 * Foxglove Studio: https://foxglove.dev/product
   - supports plotting of numeric data, camera images and geo-locations
 
+
 ### Conversion Scripts
 
 `tools/mcap_reader.py` allows easy parsing of MCAP files to numpy-arrays (including caching for faster re-opening).
 
 `tools/mcap_convert.py` converts MCAP files to CSV files.
-
-
-**TODO: further documentation and examples**
 
 <div align="right">(<a href="#readme-top">back to top</a>)</div>
 

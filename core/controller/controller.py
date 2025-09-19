@@ -45,10 +45,12 @@ from mcap_recover import recover_unfinalized_mcaps, fix_unfinished_measurements_
 @environ.config(prefix='')
 class ControllerEnv:
     LOGLEVEL = environ.var(help='logging level', default='DEBUG')
-    CONFIG_DIR = environ.var(help='config root directory', converter=lambda x: Path(x).expanduser())
-    DATA_DIR = environ.var(help='data directory', converter=lambda x: Path(x).expanduser())
+    CONFIG_DIR = environ.var(help='config root directory', converter=lambda x: Path(x).expanduser(),
+                             default='/opt/databeam/config')
+    DATA_DIR = environ.var(help='data directory', converter=lambda x: Path(x).expanduser(),
+                           default='/opt/databeam/data')
     DEPLOY_VERSION = environ.var(help='docker images tag', default='latest')
-    DB_ID = environ.var(help='DataBeam domain name for communication')
+    DB_ID = environ.var(help='DataBeam domain name for communication', default='db')
     HOST_NAME_FILE = environ.var(help='fake hostname file', default='/etc/hostname')
     DB_ROUTER = environ.var(help='DataBeam router hostname to find other nodes', default='localhost')
     DBID_LIST = environ.var(help='comma-separated list of DataBeam id/hostname', default='')

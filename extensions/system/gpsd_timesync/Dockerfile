@@ -3,7 +3,7 @@ FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 # install gpsd and chrony
-RUN apt-get update && apt-get -y install chrony gpsd pps-tools
+RUN apt-get -y install chrony gpsd pps-tools
 
 # install gpsmon debug tool
 RUN apt-get -y --no-install-recommends install gpsd-clients

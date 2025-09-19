@@ -2,7 +2,8 @@ ARG BUILD_IMAGE=hello-world:invalid
 ARG DEPLOY_IMAGE=hello-world:invalid
 
 FROM ${BUILD_IMAGE} AS build-image
-ARG MODULE_NAME=filebrowser
+# TODO adopt MODULE_NAME to name of module
+ARG MODULE_NAME=autostop
 
 COPY ./deploy/requirements_core.txt .
 COPY ./deploy/requirements_module.txt .
@@ -11,12 +12,10 @@ RUN pip install -r requirements_core.txt -r requirements_module.txt -r requireme
 
 
 FROM ${DEPLOY_IMAGE} AS deploy-image
-ARG MODULE_NAME=filebrowser
+# TODO adopt MODULE_NAME to name of module
+ARG MODULE_NAME=autostop
 
 COPY --from=build-image /opt/venv /opt/venv
-
-# install dependencies
-RUN apt-get install -y wget
 
 # copy data-interface dependencies
 COPY libs/python/vif/logger /python/libs/vif/logger
@@ -34,18 +33,9 @@ COPY extensions/system/${MODULE_NAME}/*.py /python/extensions/system/${MODULE_NA
 # copy module documentation to documentation directory
 COPY extensions/system/${MODULE_NAME}/documentation.html /python/extensions/system/${MODULE_NAME}/
 
-# Install filebrowser standalone software
-WORKDIR /python/extensions/system/${MODULE_NAME}
-RUN mkdir filebrowser
-WORKDIR /python/extensions/system/${MODULE_NAME}/filebrowser
-RUN wget https://github.com/filebrowser/filebrowser/releases/download/v2.32.0/linux-amd64-filebrowser.tar.gz
-RUN tar -xf linux-amd64-filebrowser.tar.gz
 ENV PYTHONPATH="/python/extensions:/python/libs"
-
-# Copy custom branding into filebrowser directory
-COPY extensions/system/${MODULE_NAME}/branding /python/extensions/system/${MODULE_NAME}/branding
 
 ENV PATH="/opt/venv/bin:$PATH"
 # run
 WORKDIR /python/extensions/system/${MODULE_NAME}
-CMD ["python3", "filebrowser.py"]
+CMD ["python3", "autostop.py"]

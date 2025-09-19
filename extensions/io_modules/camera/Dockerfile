@@ -5,7 +5,7 @@ FROM ${BUILD_IMAGE} AS build-image
 ARG MODULE_NAME=camera
 
 # update and install dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends curl unzip git autoconf automake libtool
+RUN apt-get install -y --no-install-recommends unzip git autoconf automake libtool
 
 # build mp4fpsmod
 RUN git clone https://github.com/nu774/mp4fpsmod.git /mp4fpsmod
@@ -23,8 +23,7 @@ RUN pip install -r requirements_core.txt -r requirements_module.txt -r requireme
 FROM ${DEPLOY_IMAGE} AS deploy-image
 ARG MODULE_NAME=camera
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3-opencv ffmpeg libsm6 libxext6 gpac
+RUN apt-get install -y --no-install-recommends python3-opencv ffmpeg libsm6 libxext6 gpac
 
 COPY --from=build-image /opt/venv /opt/venv
 COPY --from=build-image /usr/local/bin/mp4fpsmod /usr/local/bin/mp4fpsmod

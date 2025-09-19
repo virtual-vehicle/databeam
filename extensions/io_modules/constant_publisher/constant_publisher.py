@@ -177,7 +177,7 @@ class ConstantPublisher(IOModule):
         props = {}
         for d_type, x in self.constant_data.items():
             for k in x.keys():
-                props[k] = {'type': d_type}
+                props[k] = {'type': 'number' if d_type == 'random' else d_type}
         return [{
             'type': 'object',
             'properties': props

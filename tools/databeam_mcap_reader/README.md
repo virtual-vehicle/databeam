@@ -35,6 +35,10 @@ topics = reader.get_topic_names()
 
 # total number of messages
 count = reader.get_total_message_count()
+
+# start and end time in nanoseconds
+start_time_ns = reader.time_start_ns
+end_time_ns = reader.time_end_ns
 ```
 
 #### Fetch data from a specific topic:
@@ -51,14 +55,14 @@ data = reader.get_all_data()
 
 #### Fetch a specific amount of data with a start time and number of messages:
 ```
-data = mcap_reader.get_data('testtopic', start_time_ns=0, num_messages=1000)
+data = reader.get_data('testtopic', start_time_ns=0, num_messages=1000)
 # fetch next block, starting right after the first
-data = mcap_reader.get_data('testtopic', start_time_ns=data['ts'][-1] + 1, num_messages=1000)
+data = reader.get_data('testtopic', start_time_ns=data['ts'][-1] + 1, num_messages=1000)
 ```
 
 #### Example for chunked reader:
 ```
-for chunk in mcap_reader.get_data_chunked("testtopic", chunk_size_megabytes=1000):
+for chunk in reader.get_data_chunked("testtopic", chunk_size_megabytes=1000):
     print(f'got {chunk.size} messages')
     # --> process data chunk (numpy structured array)!
 ```
@@ -66,10 +70,10 @@ for chunk in mcap_reader.get_data_chunked("testtopic", chunk_size_megabytes=1000
 #### Use matplotlib to plot data:
 ```
 import matplotlib.pyplot as plt
-for topic_name in mcap_reader.get_topic_names():
-    data = mcap_reader.get_data(topic_name)
-    fields = mcap_reader.get_structure()[topic_name]['fields']
-    dtypes = mcap_reader.get_structure()[topic_name]['dtypes']
+for topic_name in reader.get_topic_names():
+    data = reader.get_data(topic_name)
+    fields = reader.get_structure()[topic_name]['fields']
+    dtypes = reader.get_structure()[topic_name]['dtypes']
     channels = []
     for i, field in enumerate(fields):
         if dtypes[i] != 'boolean' and dtypes[i] != 'string' and dtypes[i] != 'array':
@@ -83,6 +87,8 @@ plt.legend()
 plt.title('Channels over Time')
 plt.show()
 ```
+
+Please see `reader.py` - there are examples at the end of the file.
 
 ## Usage of Data Collector
 

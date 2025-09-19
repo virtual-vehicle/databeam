@@ -97,7 +97,18 @@ echo "changed DEPLOY_VERSION in .env to $new_version"
 
 # pull new images, abort if something happened
 echo "pulling images defined in docker-compose.yml"
-docker compose --env-file ${ROOT_DIR}/.env -f ${ROOT_DIR}/docker-compose.yml pull
+max_retries=5
+fail_count=0
+until docker compose --env-file ${ROOT_DIR}/.env -f ${ROOT_DIR}/docker-compose.yml pull || [ $fail_count -ge $max_retries ]; do
+    fail_count=$((fail_count + 1))
+    echo "Retrying ($fail_count/$max_retries)..."
+    sleep 4
+done
+
+if [ $fail_count -ge $max_retries ]; then
+    echo "docker compose pull failed after $max_retries attempts."
+    exit 1
+fi
 
 # ask if config should be copied
 if askNoYes "Copy current config-directory to new version?" ; then

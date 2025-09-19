@@ -8,7 +8,7 @@ CONAN_BIN := $(shell if [ -f "/root/.local/bin/conan" ]; then echo "/root/.local
 DEV_DEBUG ?= 1
 
 BUILD_IMAGE := quay.io/pypa/manylinux_2_34_x86_64
-BUILD_VERSIONS := cp310-cp310 cp311-cp311 cp312-cp312 cp313-cp313
+BUILD_VERSIONS ?= cp310-cp310 cp311-cp311 cp312-cp312 cp313-cp313
 
 # Default target
 .DEFAULT_GOAL := help
@@ -18,6 +18,8 @@ BUILD_VERSIONS := cp310-cp310 cp311-cp311 cp312-cp312 cp313-cp313
 help:
 	@echo "Available targets:"
 	@echo "  linux_wheels    - Build Python wheel packages for Linux"
+	@echo "                    specify BUILD_VERSIONS to override default:"
+	@echo "                    >  BUILD_VERSIONS=cp312-cp312 make linux_wheels"
 	@echo "  dev             - Build development C++ extension"
 	@echo "  dev_quickbuild  - Rebuild development C++ extension"
 	@echo "  clean           - Clean all build artifacts"
@@ -28,13 +30,14 @@ help:
 # Build Python wheel packages for multiple Python versions using Docker
 .PHONY: linux_wheels
 linux_wheels:
-	@echo "Building wheel packages for Linux..."
+	@echo "Preparing to build wheel packages for Linux..."
 	docker pull $(BUILD_IMAGE)
-	docker run --rm -e DBDOCKERBUILD=yes -v $(shell pwd):/src $(BUILD_IMAGE) /bin/bash -c "cd /src && make docker_wheels"
+	docker run --rm -e DBDOCKERBUILD=yes -e BUILD_VERSIONS="$(BUILD_VERSIONS)" -v $(shell pwd):/src $(BUILD_IMAGE) /bin/bash -c "cd /src && make docker_wheels"
 
 # Build Python wheel package
 .PHONY: docker_wheels
 docker_wheels: clean-wheel
+	@printf "Building wheel packages for Linux: $(BUILD_VERSIONS)\n"
 	./build_wheels_manylinux.sh $(BUILD_VERSIONS)
 
 .PHONY: _prompt

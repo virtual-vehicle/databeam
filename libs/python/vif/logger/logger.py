@@ -34,6 +34,10 @@ class LoggerMixin:
             name = self.__class__.__name__
         return logging.getLogger(name)
 
+    @staticmethod
+    def get_logger_by_filename(name: str) -> logging.Logger:
+        return logging.getLogger(os.path.basename(name).split('.')[0])
+
     @classmethod
     def static_logger(cls) -> logging.Logger:
         name = cls.__name__

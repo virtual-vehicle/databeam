@@ -23,10 +23,12 @@ from preview_api import PreviewAPI
 class RestEnv:
     LOGLEVEL = environ.var(help='logging level', default='DEBUG')
     # CONFIG_DIR = environ.var(help='config root directory', converter=lambda x: Path(x).expanduser())
-    DATA_DIR = environ.var(help='data directory', converter=lambda x: Path(x).expanduser())
-    LOGS_DIR = environ.var(help='logs directory', converter=lambda x: Path(x).expanduser())
+    DATA_DIR = environ.var(help='data directory', converter=lambda x: Path(x).expanduser(),
+                           default='/opt/databeam/data')
+    LOGS_DIR = environ.var(help='logs directory', converter=lambda x: Path(x).expanduser(),
+                           default='/opt/databeam/logs')
     DEPLOY_VERSION = environ.var(help='docker images tag', default='latest')
-    DB_ID = environ.var(help='databeam domain name for communication')
+    DB_ID = environ.var(help='databeam domain name for communication', default='db')
     DB_ROUTER = environ.var(help='DataBeam router hostname to find other nodes', default='localhost')
     # separate multiple usernames or passwords with '#'
     LOGIN_USER_NAMES = environ.var(help='User names for login', default='databeam')

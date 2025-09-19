@@ -128,6 +128,7 @@ class NMEAReader(IOModule):
                 try:
                     (raw_data, parsed_data) = nmr.read()
                 except serial.SerialException:
+                    raw_data = None
                     parsed_data = None
                 except Exception as e:
                     self.logger.error(f'EX NMEA read {type(e).__name__}: {e}')
@@ -138,6 +139,7 @@ class NMEAReader(IOModule):
                 # handle errors and reconnect
                 if parsed_data is None:
                     self.module_interface.set_ready_state(False)
+                    self.logger.error('NMEA read error: %s, %s', raw_data, parsed_data)
                     # timeout
                     if self.config_handler.config['input_mode'] == 'TCP/IP':
                         try:

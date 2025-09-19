@@ -4,7 +4,11 @@ FROM ${IMAGE}
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates python3-dev python3-venv python3-wheel build-essential curl unzip
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3-dev python3-venv python3-wheel build-essential unzip \
+    && apt-get -qq -y autoclean \
+    && apt-get -qq -y autoremove \
+    && apt-get -qq -y clean
 
 RUN /usr/bin/python3 -m venv --system-site-packages /opt/venv
 

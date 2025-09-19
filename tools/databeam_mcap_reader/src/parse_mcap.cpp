@@ -26,6 +26,7 @@ enum class field_type {
     FLOAT64,
     BYTES,  // numpy S character code
     BOOL,
+    ARRAY,
     UNKNOWN
 };
 
@@ -41,6 +42,7 @@ field_type parse_field_type(const std::string& type) {
     if (type == "float64") return field_type::FLOAT64;
     if (type == "bool") return field_type::BOOL;
     if (type.rfind("bytes", 0) == 0) return field_type::BYTES;
+    if (type == "array") return field_type::ARRAY;
     return field_type::UNKNOWN;
 }
 
@@ -51,6 +53,7 @@ std::string field_type_to_string(field_type type) {
         case field_type::FLOAT64: return "float64";
         case field_type::BYTES: return "bytes";
         case field_type::BOOL: return "bool";
+        case field_type::ARRAY: return "array";
         default: return "unknown";
     }
 }
@@ -69,25 +72,81 @@ std::unordered_map<std::string, field_details> get_field_details(const py::dtype
         py::tuple desc = fields[name.c_str()];  // desc = (dtype, offset, [title])
         py::dtype field_dtype = desc[0];
 
-        details[name] = {
-            .offset = py::cast<size_t>(desc[1]), 
-            .size = py::cast<size_t>(field_dtype.attr("itemsize")), 
-            .type = parse_field_type(field_dtype.attr("name").cast<std::string>())
-        };
-
+        if (field_dtype.attr("kind").cast<std::string>() != "V") {
+            details[name] = {
+                .offset = py::cast<size_t>(desc[1]), 
+                .size = py::cast<size_t>(field_dtype.attr("itemsize")), 
+                .type = parse_field_type(field_dtype.attr("name").cast<std::string>())
+            };
+        } else {
+            // field is an array
+            details[name] = {
+                .offset = py::cast<size_t>(desc[1]), 
+                .size = py::cast<size_t>(field_dtype.attr("itemsize")), 
+                .type = field_type::ARRAY
+            };
+        }
+        
         if (details[name].type == field_type::UNKNOWN) {
-            throw std::runtime_error("unknown field type: " + field_dtype.attr("name").cast<std::string>());
+            throw std::runtime_error("unknown field type (" + name + "): " + field_dtype.attr("name").cast<std::string>() + " of kind:" + field_dtype.attr("kind").cast<std::string>());
         }
 
 #if DEBUG_OUTPUT
-        std::cout << ">> name: " << name 
-                  << " offset: " << details[name].offset
+        std::cout << ">> field name: '" << name 
+                  << "' offset: " << details[name].offset
                   << " size: " << details[name].size
-                  << " parsed type: " << field_type_to_string(details[name].type)
+                  << " type: " << field_type_to_string(details[name].type)
                   << std::endl;
 #endif
     }
     return details;
+}
+
+void set_field_value(const rapidjson::Value& value, const char* field_name, field_type type, size_t size, char* field_ptr, bool quiet);
+void set_field_value(const rapidjson::Value& value, const char* field_name, field_type type, size_t size, char* field_ptr, bool quiet)
+{
+
+    // don't rely on JSON data types. casts to bigger datatypes are dangerous
+    switch (type)
+    {
+    case field_type::UINT64:
+        *reinterpret_cast<uint64_t*>(field_ptr) = value.GetUint64();
+        break;
+    
+    case field_type::INT64:
+        *reinterpret_cast<int64_t*>(field_ptr) = value.GetInt64();
+        break;
+    
+    case field_type::FLOAT64:
+        *reinterpret_cast<double*>(field_ptr) = value.GetDouble();
+        break;
+    
+    case field_type::BOOL:
+        *reinterpret_cast<bool*>(field_ptr) = value.GetBool();
+        break;
+    
+    case field_type::BYTES:
+        if (value.IsString())
+        {
+            const char *str_value = value.GetString();
+            size_t max_len = size - 1; // reserve space for null terminator
+            size_t str_len = value.GetStringLength();
+            // std::cout << "field: " << field_name << " bytes: " << value.GetString() << " max_len: " << max_len << " size: " << value.GetStringLength() << std::endl;
+            if (str_len > max_len) {
+                str_len = max_len;
+            }
+            std::memcpy(field_ptr, str_value, str_len);
+            field_ptr[str_len] = '\0';
+        }
+        break;
+    
+    case field_type::UNKNOWN:
+    default:
+        if (!quiet) {
+            std::cout << "ERROR: unknown type: " << value.GetType() << " for field: " << field_name << std::endl;
+        }
+        break;
+    }
 }
 
 /// parse given mcap file with data in JSON format into a numpy structured array.
@@ -128,6 +187,41 @@ std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string t
 
     std::unordered_map<std::string, field_details> details = get_field_details(py_array.dtype());
 
+    // check if we actually have a nested array
+    bool has_nested_array = false;
+    py::array py_array_nested;
+    std::unordered_map<std::string, field_details> details_array;
+
+    if (details.find("array") != details.end() && details["array"].type == field_type::ARRAY) {
+        has_nested_array = true;
+        py_array_nested = py_array[py::str("array")];
+#if DEBUG_OUTPUT
+        std::cout << "parsing py_array_nested.dtype(): " << py::str(py_array_nested.dtype()).cast<std::string>() << std::endl;
+#endif
+        details_array = get_field_details(py_array_nested.dtype());
+
+#if DEBUG_OUTPUT
+        std::cout << ">> py_array_nested.size(): " << py_array_nested.size() << std::endl;  // number of elements
+        std::cout << ">> py_array_nested.itemsize(): " << py_array_nested.itemsize() << std::endl;  // bytes per element
+        std::cout << ">> py_array_nested.nbytes(): " << py_array_nested.nbytes() << std::endl;
+        std::cout << ">> py_array_nested.data(): " << py_array_nested.data() << std::endl;
+        std::cout << ">> py_array_nested.dtype(): " << py::str(py_array_nested.dtype()).cast<std::string>() << std::endl;
+        std::cout << ">> py_array_nested.ndim(): " << py_array_nested.ndim() << std::endl;  // number of dimensions
+        std::cout << ">> py_array_nested.shape(): (";
+        for (ssize_t i = 0; i < py_array_nested.ndim(); ++i) {
+            std::cout << py_array_nested.shape(i);
+            if (i < py_array_nested.ndim() - 1) std::cout << ", ";
+        }
+        std::cout << ")" << std::endl;
+        std::cout << ">> py_array_nested.strides(): (";
+        for (ssize_t i = 0; i < py_array_nested.ndim(); ++i) {
+            std::cout << py_array_nested.strides(i);
+            if (i < py_array_nested.ndim() - 1) std::cout << ", ";
+        }
+        std::cout << ")" << std::endl;
+#endif
+    }
+
     mcap::McapReader reader;
     {
         const auto res = reader.open(mcap_path);
@@ -142,7 +236,7 @@ std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string t
     // only load specified topic and use a specific start time
     mcap::ReadMessageOptions options;
     options.startTime = start_time_ns;
-    options.topicFilter = [topic](std::string_view _topic) {
+    options.topicFilter = [topic](const std::string_view _topic) {
         return _topic == topic;
     };
 
@@ -190,55 +284,54 @@ std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string t
         {
             const char* field = it_json->name.GetString();
             const auto& value = it_json->value;
+            // std::cout << "type: " << value.GetType() << " for field: " << field << std::endl;
             
             if (value.IsNull() || value.IsObject()) {
+                // std::cout << "is null or object: " << field << std::endl;
                 continue;
             }
+
+            if (value.IsArray() && has_nested_array) {
+                // check if "field" is in sub-array dtype
+                std::unordered_map<std::string, field_details>::iterator details_array_it = details_array.find(field);
+                if (details_array_it == details_array.end()) {
+                    continue;
+                }
+
+                char* data_ptr_nested = row_ptr + details["array"].offset;
+                size_t element_stride_nested = py_array_nested.strides(1);  // stride between elements in same row
+
+                // add values to nested array
+                size_t array_index = 0;
+                for (auto& v : value.GetArray())
+                {
+                    // Safety check to prevent buffer overflow - check against number of columns, not rows
+                    if (array_index >= static_cast<size_t>(py_array_nested.shape(1))) {
+                        if (!quiet) {
+                            std::cerr << "ERROR in message " << cnt << ": array (" << field << ") length " << value.Size() << " exceeds nested array column size " << py_array_nested.shape(1) << std::endl;
+                        }
+                        break;
+                    } else {
+                        // calculate pointer to current array element within the current row
+                        char* row_ptr_nested = data_ptr_nested + (array_index * element_stride_nested);
+                        
+                        set_field_value(v, field, details_array_it->second.type, details_array_it->second.size, 
+                                        row_ptr_nested + details_array_it->second.offset, quiet);
+                    }
+
+                    array_index++;
+                }
+                continue;
+            }
+
             // check if "field" is in dtype
             std::unordered_map<std::string, field_details>::iterator details_it = details.find(field);
             if (details_it == details.end()) {
                 continue;
             }
-
-            // don't rely on JSON data types. casts to bigger datatypes are dangerous
-            switch (details_it->second.type)
-            {
-            case field_type::UINT64:
-                *reinterpret_cast<uint64_t*>(row_ptr + details_it->second.offset) = value.GetUint64();
-                break;
             
-            case field_type::INT64:
-                *reinterpret_cast<int64_t*>(row_ptr + details_it->second.offset) = value.GetInt64();
-                break;
-            
-            case field_type::FLOAT64:
-                *reinterpret_cast<double*>(row_ptr + details_it->second.offset) = value.GetDouble();
-                break;
-            
-            case field_type::BOOL:
-                *reinterpret_cast<bool*>(row_ptr + details_it->second.offset) = value.GetBool();
-                break;
-            
-            case field_type::BYTES:
-                {
-                    const char *myvar = value.GetString();
-                    size_t len = details_it->second.size - 1;
-                    // std::cout << "field: " << field << " bytes: " << value.GetString() << " len: " << len << " size: " << value.GetStringLength() << std::endl;
-                    if (value.GetStringLength() < len) {
-                        len = value.GetStringLength();
-
-                    }
-                    std::memcpy(row_ptr + details_it->second.offset, myvar, len);
-                }
-                break;
-            
-            case field_type::UNKNOWN:
-            default:
-                if (!quiet) {
-                    std::cout << "ERROR: unknown type: " << value.GetType() << " for field: " << field << std::endl;
-                }
-                break;
-            }
+            set_field_value(value, field, details_it->second.type, details_it->second.size, 
+                            row_ptr + details_it->second.offset, quiet);
         }
 
         cnt += 1;

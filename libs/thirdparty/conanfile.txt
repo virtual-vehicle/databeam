@@ -1,5 +1,5 @@
 [requires]
-mcap/[>=1.2.1]
+mcap/[>=2.0.0]
 nlohmann_json/[>=3.10.5]
 rapidjson/cci.20230929
 cppzmq/[>=4.10.0]

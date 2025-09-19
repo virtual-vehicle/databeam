@@ -19,7 +19,7 @@ int main(int argc, char **argv)
   env_config.add("DATA_DIR", "/opt/databeam/data");
   env_config.add("CONFIG_DIR", "/opt/databeam/config");
   env_config.add("DEPLOY_VERSION", "latest");
-  env_config.add("DB_ID", "db_debug");
+  env_config.add("DB_ID", "db");
   env_config.add("DB_ROUTER", "localhost");
   env_config.add("DB_ROUTER_FRONTEND_PORT", "5555");
   env_config.add("DB_ROUTER_BACKEND_PORT", "5556");

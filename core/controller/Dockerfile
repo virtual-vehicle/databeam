@@ -11,7 +11,6 @@ RUN pip install -r requirements_core.txt -r requirements.txt
 FROM ${DEPLOY_IMAGE} AS deploy-image
 
 COPY --from=build-image /opt/venv /opt/venv
-RUN apt-get update && apt-get install -y --no-install-recommends jq curl
 
 # install mcap CLI
 RUN PARCH="$(dpkg --print-architecture)"; \
