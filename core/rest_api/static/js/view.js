@@ -937,7 +937,8 @@ class View
     {
       let label = webinterfaces_list[i]['label']
       let port = webinterfaces_list[i]['port']
-      let databeam_ip = this.model.getDataBeamIP() + ":" + port.toString()
+      let url = webinterfaces_list[i]['url']
+      let databeam_ip = url !== "" ?  url : this.model.getDataBeamIP() + ":" + port.toString()
       let web_button = this.createEmojiButtonWithLabel(parent_div, [['module-name', m.getName()]], "&#127760;", label)
       web_button.setAttribute("m-url", databeam_ip)
       web_button.addEventListener("click", event => this.onOpenModuleWebInterface(event), true);
@@ -1522,6 +1523,35 @@ class View
             if(!nowrap) item_div.style.justifyContent = "end"
             item_div.appendChild(input)
           }
+
+          if(array.length > 1 && nowrap && entry.getType() !== "boolean")
+          {
+            //create button to move array element up
+            let up_button = document.createElement("BUTTON")
+            up_button.innerHTML = "&#11014;&#65039;"
+            up_button.className = "emoji-button"
+            up_button.disabled = j == 0
+            up_button.style.fontSize = "18px"
+            up_button.style.padding = "0px"
+            up_button.setAttribute("config-index", entry.getIndex().toString())
+            up_button.setAttribute("array-index", j.toString())
+            up_button.addEventListener("click", event => this.onMoveConfigArrayElement(event, true), true);
+            
+            //create button to move array element down
+            let down_button = document.createElement("BUTTON")
+            down_button.innerHTML = "&#11015;&#65039;"
+            down_button.className = "emoji-button"
+            down_button.disabled = j >= (array.length - 1)
+            down_button.style.fontSize = "18px"
+            down_button.style.padding = "0px"
+            down_button.setAttribute("config-index", entry.getIndex().toString())
+            down_button.setAttribute("array-index", j.toString())
+            down_button.addEventListener("click", event => this.onMoveConfigArrayElement(event, false), true);
+
+            //append buttons
+            item_div.appendChild(up_button)
+            item_div.appendChild(down_button)
+          }
         }
 
         if(array.length == 0)
@@ -1689,6 +1719,13 @@ class View
     sub_div.style.display = sub_div.style.display == "flex" ? "none" : "flex"
 
     this.model.updateConfigEntry(config_index, -1, sub_div.style.display == "flex")
+  }
+
+  onMoveConfigArrayElement(event, move_up)
+  {
+    let config_index = parseInt(event.currentTarget.getAttribute("config-index"))
+    let array_index = parseInt(event.currentTarget.getAttribute("array-index"))
+    this.model.moveConfigArrayElement(config_index, array_index, move_up)
   }
 
   onSubmitAddConfigArray(event)

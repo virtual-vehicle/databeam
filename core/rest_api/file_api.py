@@ -107,11 +107,7 @@ class FileAPI(LoggerMixin):
 
     def get_log_files(self):
         file_infos = self._walk_directory(self._logs_dir)['files']
-        files = []
-
-        for f in file_infos:
-            files.append(f[0])
-
+        files = [f[0] for f in file_infos]
         return files
 
     def get_files(self):

@@ -5,8 +5,6 @@ from vif.data_interface.config_factory import ConfigFactory
 
 
 class AutostopConfig(BaseConfig):
-
-    # TODO replace with proper name/type of config (use lower_case)
     Name = 'autostop'
 
     @classmethod

@@ -64,7 +64,7 @@ class LoggerMixin:
         finally:
             toc: int = time.perf_counter_ns()
             if toc - tic > limit_ms * 1e6:
-                self.logger.log(log_severity, f"%s took = %.3f ms", prefix, (toc - tic) / 1e6)
+                self.logger.log(log_severity, "%s took = %.3f ms", prefix, (toc - tic) / 1e6)
 
 
 def log_reentrant(message: str):

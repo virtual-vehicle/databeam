@@ -1,13 +1,14 @@
 """
 V4L Camera
 """
+import logging
 import queue
 import threading
 import time
 import traceback
 import subprocess
 import cv2 as cv
-from typing import Optional, Dict, Union, List
+from typing import Optional, Dict, List
 import base64
 from datetime import datetime
 import os
@@ -87,14 +88,11 @@ class Camera(IOModule):
     def _export_thread_fn(self):
         while not self._export_stop_event.is_set():
             try:
-                export_job = self._export_queue.get(timeout=0.25)
+                video_filename, timecodes_filename, transformed_filename = self._export_queue.get(timeout=0.25)
             except queue.Empty:
                 continue
 
             # get file names
-            video_filename = export_job[0]
-            timecodes_filename = export_job[1]
-            transformed_filename = export_job[2]
             temp_filename = transformed_filename + "_tmp.mp4"
 
             # log export
@@ -119,8 +117,7 @@ class Camera(IOModule):
 
             if mp4box_return_code != 0:
                 msg = f"{video_filename} - mp4box returned {mp4box_return_code}"
-                self.logger.error(msg)
-                self.module_interface.log_gui(msg)
+                self.module_interface.log_gui(msg, log_severity=logging.ERROR)
                 continue
 
             # remove intermediate mp4 file
@@ -175,8 +172,7 @@ class Camera(IOModule):
                 # make sure there is a frame
                 if not ret:
                     if not error_shown:
-                        self.logger.error("Frame Capture Error.")
-                        self.module_interface.log_gui("Frame Capture Error.")
+                        self.module_interface.log_gui("Frame Capture Error.", log_severity=logging.ERROR)
                         error_shown = True
                     self._thread_stop_event.wait(0.001)
                     continue
@@ -459,28 +455,28 @@ class Camera(IOModule):
             'type': 'object',
             "properties": {
                 "timestamp": {
-                  "type": "object",
-                  "properties": {
-                    "sec": {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    "nsec": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 999999999
+                    "type": "object",
+                    "properties": {
+                        "sec": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "nsec": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 999999999
+                        }
                     }
-                  }
                 },
                 "frame_id": {
-                  "type": "string",
+                    "type": "string",
                 },
                 "data": {
-                  "type": "string",
-                  "contentEncoding": "base64",
+                    "type": "string",
+                    "contentEncoding": "base64",
                 },
                 "format": {
-                  "type": "string",
+                    "type": "string",
                 }
             }
         }]

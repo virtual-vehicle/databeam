@@ -20,10 +20,11 @@ class ModuleMetaFactory:
     def add_mcap_topics(self, mcap_topics: List[str]):
         self._meta_dict['_mcap_topics'] = mcap_topics
 
-    def add_webinterface(self, label: str, port: str):
+    def add_webinterface(self, label: str, port: str = "", url: str = ""):
         data_dict = {
             'label': label,
-            'port': str(port)
+            'port': str(port),
+            'url': url
         }
 
         self._meta_dict['_webinterfaces'].append(data_dict)

@@ -1,11 +1,17 @@
 import json
-from typing import Dict, List, Callable, Tuple, Optional
+from dataclasses import dataclass
+from typing import Dict, List, Callable, Optional
 from functools import partial
 
 from vif.logger.logger import LoggerMixin
 from vif.data_interface.connection_manager import ConnectionManager, Key
 
-from vif.data_interface.network_messages import GetSchemasReply
+
+@dataclass
+class Subscription:
+    sub_id: int
+    sub_all: bool
+    topic: Key
 
 
 class LiveDataReceiver(LoggerMixin):
@@ -14,7 +20,7 @@ class LiveDataReceiver(LoggerMixin):
 
         self._cm = con_mgr
         # dict of subscriptions: key = topic, value = (sub_id: int, sub_all: bool)
-        self._subs: Dict[str, Tuple[int, bool, Key]] = {}
+        self._subs: Dict[str, Subscription] = {}
         self._db_id = databeam_id
         self._data_callback: Optional[Callable[[str, str, Dict | str], None]] = None
         self._raw_json_string = False
@@ -46,11 +52,12 @@ class LiveDataReceiver(LoggerMixin):
         modules_topic = {new_subs[x]: sub_all[x] for x in range(len(new_subs))}
 
         # list of keys of self._subs: IF key not in modules_topic OR sub bool does not match
-        remove_list = [k for k, v in self._subs.items() if k not in modules_topic.keys() or v[1] != modules_topic[k]]
+        remove_list = [k for k, v in self._subs.items() if
+                       k not in modules_topic.keys() or v.sub_all != modules_topic[k]]
 
         # remove unused subscriptions
         for t in remove_list:
-            self._cm.unsubscribe(self._subs[t][0])
+            self._cm.unsubscribe(self._subs[t].sub_id)
             del self._subs[t]
 
         # subscribe for new modules
@@ -59,10 +66,10 @@ class LiveDataReceiver(LoggerMixin):
             if sub_key not in self._subs.keys():
                 topic = Key(db_id, f'm/{m}', 'liveall' if s_all else 'livedec')
                 sub_id = self._cm.subscribe(topic, partial(self._data_received, db_id, m))
-                self._subs[sub_key] = (sub_id, s_all, topic)
+                self._subs[sub_key] = Subscription(sub_id, s_all, topic)
 
         # log subscriptions
-        log_data = [[k, "all" if v[1] else "fixed"] for k, v in self._subs.items()]
+        log_data = [[k, "all" if v.sub_all else "fixed"] for k, v in self._subs.items()]
         self.logger.info("Receive Live Data: %s", str(log_data))
 
         # register callback
@@ -70,8 +77,8 @@ class LiveDataReceiver(LoggerMixin):
 
     def shutdown(self):
         self.logger.debug('shutting down')
-        for value in self._subs.values():
-            self._cm.unsubscribe(value[0])
+        for sub in self._subs.values():
+            self._cm.unsubscribe(sub.sub_id)
         self._subs.clear()
 
     def _data_received(self, db_id: str, module_name: str, key: str, data: bytes) -> None:

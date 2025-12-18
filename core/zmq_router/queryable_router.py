@@ -1,6 +1,7 @@
 import logging
 import signal
 import threading
+from contextlib import suppress
 
 import zmq
 import environ
@@ -83,10 +84,8 @@ if __name__ == '__main__':
     shutdown_ev = threading.Event()
 
     for sig in signal.valid_signals():
-        try:
+        with suppress(OSError):
             signal.signal(sig, lambda signum, frame: log_reentrant(f'UNHANDLED signal {signum} called'))
-        except OSError:
-            pass
 
     # ignore child signal
     signal.signal(signal.SIGCHLD, signal.SIG_DFL)

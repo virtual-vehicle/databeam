@@ -4,15 +4,17 @@ FROM ${IMAGE}
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc g++ make cmake ninja-build pkg-config git libcurl4-openssl-dev curl unzip \
-    && apt-get -qq -y autoclean \
-    && apt-get -qq -y autoremove \
-    && apt-get -qq -y clean
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends gcc g++ make cmake ninja-build pkg-config git libcurl4-openssl-dev curl unzip
 
 # build uldaq library
 WORKDIR /
-RUN apt-get install -y --no-install-recommends libusb-1.0-0-dev bzip2
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends libusb-1.0-0-dev bzip2
 RUN mkdir -p /build_uldaq
 WORKDIR /build_uldaq
 RUN curl -Lo libuldaq-1.2.1.tar.bz2 https://github.com/mccdaq/uldaq/releases/download/v1.2.1/libuldaq-1.2.1.tar.bz2 \
@@ -31,7 +33,10 @@ RUN make install
 
 # install conan for cpp build dependencies
 WORKDIR /
-RUN apt-get install -y --no-install-recommends pipx
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends pipx
 RUN pipx ensurepath && pipx install conan
 RUN /root/.local/bin/conan profile detect --force
 

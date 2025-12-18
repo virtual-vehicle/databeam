@@ -4,6 +4,7 @@ import threading
 import time
 import traceback
 import uuid
+from collections import defaultdict
 from dataclasses import dataclass
 import random
 from typing import Dict, Tuple, Callable, Optional, List
@@ -87,11 +88,30 @@ class BrokerEnv:
     DB_ROUTER_PUB_PORT = environ.var(help='DataBeam router PUB port', default='5558')
 
 
+@dataclass
+class PubSocket:
+    lock: threading.Lock
+    socket: zmq.Socket
+    declarations: List[int]
+
+
+@dataclass
+class SubCallback:
+    sub_id: int
+    callback: Callable[[str, bytes], None]
+
+
+@dataclass
+class SubCommand:
+    subscribe: bool
+    topic: str
+
+
 class RouterConnection(LoggerMixin):
     def __init__(self, *args, db_id: str, router_hostname: str, node_name: str = '', max_parallel_req: int = 1,
                  max_parallel_queryables: int = 1, **kwargs):
         """
-
+        Handle connection to single ZMQ router
         """
         super().__init__(*args, logger_name=f'RouterConnection {db_id}', **kwargs)
 
@@ -123,13 +143,13 @@ class RouterConnection(LoggerMixin):
         # one PUB socket per topic added by "declare_publisher"
         self._pub_sockets_lock = threading.Lock()
         # key (topic): lock, pub-socket, list of declaration-uuids
-        self._pub_sockets: Dict[str, Tuple[threading.Lock, zmq.Socket, List[int]]] = {}
+        self._pub_sockets: Dict[str, PubSocket] = {}
 
         self._subscribers_lock = threading.Lock()
         # key (topic): list of uuids (int) and callbacks
-        self._subscribers: Dict[str, List[Tuple[int, Callable[[str, bytes], None]]]] = {}
+        self._subscribers: Dict[str, List[SubCallback]] = defaultdict(list)
         # queue to task the worker thread to un-/subscribe to topics
-        self._topic_transfer_q: queue.SimpleQueue[Tuple[bool, str]] = queue.SimpleQueue()
+        self._topic_transfer_q: queue.SimpleQueue[SubCommand] = queue.SimpleQueue()
 
         self._queryables_lock = threading.Lock()
         # dict-key = topic --> callback
@@ -155,10 +175,9 @@ class RouterConnection(LoggerMixin):
         self._subscribe_thread.join()
         with self._pub_sockets_lock:
             for key, pub_sock_info in self._pub_sockets.items():
-                pub_sock_lock, pub_sock, _ = pub_sock_info
                 self.logger.warning('closing abandoned publisher socket %s', key)
-                with pub_sock_lock:
-                    pub_sock.close()
+                with pub_sock_info.lock:
+                    pub_sock_info.socket.close()
             self._pub_sockets.clear()
         if self._query_req_socks is not None:
             while not self._query_req_socks.empty():
@@ -327,21 +346,21 @@ class RouterConnection(LoggerMixin):
             try:
                 # subscribe to new topics
                 if not self._topic_transfer_q.empty():
-                    sub_unsub, sub_topic = self._topic_transfer_q.get_nowait()
-                    if sub_unsub:
-                        sock.subscribe(sub_topic)
+                    sub_command = self._topic_transfer_q.get_nowait()
+                    if sub_command.subscribe:
+                        sock.subscribe(sub_command.topic)
                     else:
-                        sock.unsubscribe(sub_topic)
+                        sock.unsubscribe(sub_command.topic)
                     continue
 
-                topic_bytes, rx_msg = sock.recv_multipart()
+                topic_bytes, rx_msg = sock.recv_multipart()  # 100ms timeout
                 topic = topic_bytes.decode()
                 # logger.debug('rx: %s', rx_msg)
                 with self._subscribers_lock:
                     sub_callbacks = self._subscribers.get(topic)
                     if sub_callbacks is None:
                         continue
-                    cb_list = [cb[1] for cb in sub_callbacks]
+                    cb_list = [cb.callback for cb in sub_callbacks]
                 # execute callbacks outside of lock
                 for cb in cb_list:
                     cb(topic, rx_msg)
@@ -354,13 +373,10 @@ class RouterConnection(LoggerMixin):
 
     def subscribe(self, key: Key, cb: Callable[[str, bytes], None]) -> int:
         with self._subscribers_lock:
-            if str(key) not in self._subscribers:
-                self._subscribers[str(key)] = []
-
             sub_id = uuid.uuid4().int
-            self._subscribers[str(key)].append((sub_id, cb))
+            self._subscribers[str(key)].append(SubCallback(sub_id, cb))
 
-        self._topic_transfer_q.put((True, str(key)))
+        self._topic_transfer_q.put(SubCommand(subscribe=True, topic=str(key)))
         return sub_id
 
     def unsubscribe(self, sub_id: int) -> None:
@@ -372,7 +388,7 @@ class RouterConnection(LoggerMixin):
                 for key, sub_list in self._subscribers.items():
                     # find ID of callback in list
                     for idx, cb in enumerate(sub_list):
-                        if cb[0] == sub_id:
+                        if cb.sub_id == sub_id:
                             remove_key = key
                             remove_index = idx
                             break
@@ -388,7 +404,7 @@ class RouterConnection(LoggerMixin):
 
                 if len(self._subscribers[remove_key]) == 0:
                     # no callbacks left, unsubscribe and remove topic key
-                    self._topic_transfer_q.put((False, remove_key))
+                    self._topic_transfer_q.put(SubCommand(subscribe=False, topic=remove_key))
                     self._subscribers.pop(remove_key)
         except Exception as e:
             self.logger.error(f'EX unsubscribe ({type(e).__name__}): {e}\n{traceback.format_exc()}')
@@ -399,13 +415,12 @@ class RouterConnection(LoggerMixin):
             with self._pub_sockets_lock:
                 if str(key) not in self._pub_sockets:
                     self.logger.debug('adding new publisher %s: id %d', str(key), pub_id)
-                    pub_sock_lock = threading.Lock()
                     pub_sock = create_connect(f'tcp://{self._router_hostname}:{self._ports.DB_ROUTER_SUB_PORT}', zmq,
                                               zmq.PUB)
-                    self._pub_sockets[str(key)] = (pub_sock_lock, pub_sock, [pub_id])
+                    self._pub_sockets[str(key)] = PubSocket(threading.Lock(), pub_sock, [pub_id])
                 else:
                     self.logger.debug('adding publisher id %d to existing topic %s', pub_id, str(key))
-                    self._pub_sockets[str(key)][2].append(pub_id)
+                    self._pub_sockets[str(key)].declarations.append(pub_id)
         except Exception as e:
             self.logger.error(f'EX declare_publisher ({str(key)}) {type(e).__name__}: {e}\n{traceback.format_exc()}')
             return None
@@ -427,33 +442,27 @@ class RouterConnection(LoggerMixin):
             with self._pub_sockets_lock:
                 remove_key = None
                 for key, pub_sock_info in self._pub_sockets.items():
-                    pub_sock_lock, pub_sock, pub_id_list = pub_sock_info
-                    if pub_id in pub_id_list:
+                    if pub_id in pub_sock_info.declarations:
                         found = True
-                        pub_id_list.remove(pub_id)
-                        if len(pub_id_list) == 0:
+                        pub_sock_info.declarations.remove(pub_id)
+                        if len(pub_sock_info.declarations) == 0:
                             # remove publisher if noone needs it anymore
                             remove_key = key
                         break
                 if remove_key is not None:
                     self.logger.debug('undeclaring publisher %s with id %d', remove_key, pub_id)
-                    pub_sock_lock, pub_sock, pub_id_list = self._pub_sockets.pop(remove_key)
-                    with pub_sock_lock:
-                        pub_sock.close()
+                    pub_sock_info = self._pub_sockets.pop(remove_key)
+                    with pub_sock_info.lock:
+                        pub_sock_info.socket.close()
         except Exception as e:
             self.logger.error(f'EX undeclare_publisher ({pub_id}) {type(e).__name__}: {e}\n{traceback.format_exc()}')
         return found
 
     def publish(self, key: Key, data: bytes | str) -> None:
         try:
-            if isinstance(data, str):
-                data_bytes = data.encode()
-            else:
-                data_bytes = data
-
-            pub_sock_lock, pub_sock, _ = self._pub_sockets[str(key)]
-            with pub_sock_lock:
-                pub_sock.send_multipart([key.encode(), data_bytes])
+            pub_sock_info = self._pub_sockets[str(key)]
+            with pub_sock_info.lock:
+                pub_sock_info.socket.send_multipart([key.encode(), data.encode() if isinstance(data, str) else data])
         except Exception as e:
             self.logger.error(f'EX publish {key} ({type(e).__name__}): {e}\n{traceback.format_exc()}')
 

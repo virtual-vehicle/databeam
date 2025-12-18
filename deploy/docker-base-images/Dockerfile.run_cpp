@@ -4,8 +4,7 @@ FROM ${IMAGE}
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
-    && apt-get -qq -y autoclean \
-    && apt-get -qq -y autoremove \
-    && apt-get -qq -y clean
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates

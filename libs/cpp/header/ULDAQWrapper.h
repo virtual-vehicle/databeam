@@ -52,6 +52,10 @@ public:
     void logTCTypes();
 
     DaqDeviceHandle getDaqDeviceHandle();
+    UlError getChannelType(int channel_index, AiChanType* chan_type);
+
+    bool error() {return err != ERR_NO_ERROR;}
+
 private:
     Logger* logger = nullptr;
 

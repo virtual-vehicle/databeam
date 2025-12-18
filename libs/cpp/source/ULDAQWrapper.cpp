@@ -26,7 +26,7 @@ void ULDAQWrapper::discover()
         logger->debug("Found Device: " + std::string(device_descriptors[i].uniqueId));
     }
 
-    if(err != UlError::ERR_NO_ERROR)
+    if(err != ERR_NO_ERROR)
     {
         logger->error("ULDAQ error from ulGetDaqDeviceInventory(): " + std::to_string(err));
     }
@@ -147,14 +147,10 @@ void ULDAQWrapper::logAOInfo()
        ulAOGetInfo(daq_device_handle, AO_INFO_TRIG_TYPES, 0, &info_trig_types) != ERR_NO_ERROR ||
        ulAOGetInfo(daq_device_handle, AO_INFO_FIFO_SIZE, 0, &info_fifo_size) != ERR_NO_ERROR)
     {
-        logger->error("ULDAQ Error " + std::to_string(err) + " in logAOInfo().");
+        logger->error("ULDAQ Error in ulAOGetInfo().");
     }
     else
     {
-        
-
-        
-
         logger->debug(std::string("Anlog Out Info:"));
         logger->debug(std::string("- AO_INFO_RESOLUTION: ") + std::to_string(info_resolution));
         logger->debug(std::string("- AO_INFO_NUM_CHANS: ") + std::to_string(info_num_chans));
@@ -169,7 +165,7 @@ void ULDAQWrapper::logAOInfo()
 
             if(ulAOGetInfo(daq_device_handle, AO_INFO_RANGE, i, &range) != ERR_NO_ERROR)
             {
-                logger->error("ULDAQ Error " + std::to_string(err) + " in logAOInfo() AO_INFO_RANGE.");
+                logger->error("ULDAQ Error in ulAOGetInfo() AO_INFO_RANGE.");
                 return;
             }
             else
@@ -206,12 +202,11 @@ void ULDAQWrapper::logAOInfo()
         logger->debug(std::string("- AO_INFO_RANGE: ") + std::to_string(info_range));
         logger->debug(std::string("- AO_INFO_FIFO_SIZE: ") + std::to_string(info_fifo_size));
     }
-
 }
 
 void ULDAQWrapper::setChannelType(int channel_index, AiChanType chan_type)
 {
-    UlError err = ulAISetConfig(daq_device_handle, AiConfigItem::AI_CFG_CHAN_TYPE, channel_index, chan_type);
+    err = ulAISetConfig(daq_device_handle, AiConfigItem::AI_CFG_CHAN_TYPE, channel_index, chan_type);
 
     if(err != ERR_NO_ERROR) logger->error("ULDAQ Error " + std::to_string(err) + " in setChannelType().");
 }
@@ -226,8 +221,8 @@ void ULDAQWrapper::setAllChannelTypes(AiChanType chan_type)
 
 void ULDAQWrapper::setTCType(int channel_index, TcType tc_type)
 {
-    UlError ul_error = ulAISetConfig(daq_device_handle, AiConfigItem::AI_CFG_CHAN_TC_TYPE, channel_index, tc_type);
-    if(ul_error != ERR_NO_ERROR) logger->error("ULDAQ Error " + std::to_string(err) + " in setTCType().");
+    err = ulAISetConfig(daq_device_handle, AiConfigItem::AI_CFG_CHAN_TC_TYPE, channel_index, tc_type);
+    if(err != ERR_NO_ERROR) logger->error("ULDAQ Error " + std::to_string(err) + " in setTCType().");
 }
 
 void ULDAQWrapper::setAllTCTypes(TcType tc_type)
@@ -241,16 +236,18 @@ void ULDAQWrapper::logTCTypes()
 
     for(int i = 0; i < 8; i++)
     {
-        long long config_value;
-        UlError ul_error = ulAIGetConfig(daq_device_handle, AiConfigItem::AI_CFG_CHAN_TC_TYPE, i, &config_value);
+        long long config_value_tc, config_value_type;
+        UlError ul_error1 = ulAIGetConfig(daq_device_handle, AiConfigItem::AI_CFG_CHAN_TYPE, i, &config_value_type);
+        UlError ul_error2 = ulAIGetConfig(daq_device_handle, AiConfigItem::AI_CFG_CHAN_TC_TYPE, i, &config_value_tc);
         
-        if(ul_error != ERR_NO_ERROR)
-        {
-            logger->error("ULDAQ Error " + std::to_string(err) + " in logTCTypes().");
-        }
-        else
-        {
-            logger->debug(std::string("- Channel ") + std::to_string(i) + std::string(" set to ") + tcTypeEnumToString((TcType)config_value));
+        if(ul_error1 != ERR_NO_ERROR) {
+            logger->error("ULDAQ Error " + std::to_string(ul_error1) + " in logTCTypes() / AI_CFG_CHAN_TYPE.");
+        } else if (ul_error2 != ERR_NO_ERROR) {
+            logger->error("ULDAQ Error " + std::to_string(ul_error2) + " in logTCTypes() / AI_CFG_CHAN_TC_TYPE.");
+        } else {
+            logger->debug(std::string("- Channel ") + std::to_string(i) + std::string(" type set to ") + aiChanTypeEnumToString((AiChanType)config_value_type));
+            if((AiChanType)config_value_type == AiChanType::AI_TC)
+                logger->debug(std::string("- Channel ") + std::to_string(i) + std::string(" TC set to ") + tcTypeEnumToString((TcType)config_value_tc));
         }
     }
 }
@@ -258,6 +255,18 @@ void ULDAQWrapper::logTCTypes()
 DaqDeviceHandle ULDAQWrapper::getDaqDeviceHandle()
 {
     return daq_device_handle;
+}
+
+UlError ULDAQWrapper::getChannelType(int channel_index, AiChanType* chan_type)
+{
+    long long config_value;
+    UlError ul_err = ulAIGetConfig(daq_device_handle, AiConfigItem::AI_CFG_CHAN_TYPE, channel_index, &config_value);
+    *chan_type = (AiChanType)config_value;
+
+    if(ul_err != ERR_NO_ERROR) {
+        logger->error("ULDAQ Error " + std::to_string(err) + " in getChannelType().");
+    }
+    return ul_err;
 }
 
 

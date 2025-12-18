@@ -1,0 +1,88 @@
+# Database and Grafana visualization for use with database_sync module:
+
+services:
+  fix-database-perms:
+    image: alpine
+    command: ["sh", "-c", "chown -R 472:472 /var/lib/grafana && chown -R 1000:1000 /var/lib/tsdb"]
+    volumes:
+      - ${ROOT_DIR}/data/tsdb_data:/var/lib/tsdb
+      - ${ROOT_DIR}/data/grafana-data:/var/lib/grafana
+    restart: "no"
+
+  timescaledb:
+    # "timescaledb" image is smaller
+    # image: timescale/timescaledb:latest-pg18
+    # "timescaledb-ha" image offers more tools like "lttb" downsampling
+    image: timescale/timescaledb-ha:pg18
+    container_name: timescaledb
+    depends_on:
+      fix-database-perms:
+        condition: service_completed_successfully
+    environment:
+      PGDATA: /pgdata
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ${ROOT_DIR}/data/tsdb_data:/pgdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tsdb -d metrics"]
+      interval: 5s
+      start_period: 1000ms
+      start_interval: 200ms
+      timeout: 1s
+      retries: 5
+    networks:
+      - internal_nw
+      # only enable "public_nw" if database access outside this stack is needed
+      # - public_nw
+    restart: unless-stopped
+    stop_grace_period: 20s
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      # "fix-database-perms" is only needed if grafana runs standalone
+      # fix-database-perms:
+      #   condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD}
+      TIMESCALEDB_HOST: ${TIMESCALEDB_HOST}
+      TIMESCALEDB_PORT: ${TIMESCALEDB_PORT}
+      TIMESCALEDB_USER: ${TIMESCALEDB_USER}
+      TIMESCALEDB_PASSWORD: ${TIMESCALEDB_PASSWORD}
+      TIMESCALEDB_DATABASE: ${TIMESCALEDB_DATABASE}
+      TIMESCALEDB_POSTGRES_VERSION: ${TIMESCALEDB_POSTGRES_VERSION}
+      GF_DATE_FORMATS_FULL_DATE: DD.MM.YYYY HH:mm:ss
+      GF_DATE_FORMATS_INTERVAL_SECOND: HH:mm:ss
+      GF_DATE_FORMATS_INTERVAL_MINUTE: HH:mm
+      GF_DATE_FORMATS_INTERVAL_HOUR: DD.MM. HH:mm
+      GF_DATE_FORMATS_INTERVAL_DAY: DD.MM.
+      GF_DATE_FORMATS_INTERVAL_MONTH: MM.YYYY
+      GF_DATE_FORMATS_INTERVAL_YEAR: YYYY
+      GF_LOG_LEVEL: warn   # or "error"
+      GF_TIME_PICKER_QUICK_RANGES: >-
+        [
+          {"from":"now-1h","to":"now","display":"Last 1 hour"},
+          {"from":"now-25h","to":"now","display":"Last 24 hours"},
+          {"from":"now-7d","to":"now-7d","display":"Last week"},
+          {"from":"now/M","to":"now/M","display":"This month"},
+          {"from":"now-1M/M","to":"now-1M/M","display":"Last month"},
+          {"from":"now-1y","to":"now","display":"Last year"}
+        ]
+    volumes:
+      - ${ROOT_DIR}/data/grafana-data:/var/lib/grafana
+      - ../grafana-datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+    networks:
+      - internal_nw
+      - public_nw
+    restart: unless-stopped
+    stop_grace_period: 20s

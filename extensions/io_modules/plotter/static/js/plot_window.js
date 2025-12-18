@@ -74,6 +74,26 @@ class PlotWindow
     this.options_div.appendChild(this.enabled_ch_label)
 
     //create div for enabled channels flags
+    this.enabled_ch_buttons_div = document.createElement("div")
+    this.enabled_ch_buttons_div.innerHTML = ""
+    this.enabled_ch_buttons_div.setAttribute("class", "enabled-ch-div")
+    this.options_div.appendChild(this.enabled_ch_buttons_div)
+
+    //create button to toggle plot options
+    this.enable_all_channels_button = document.createElement("div")
+    this.enable_all_channels_button.innerHTML = "Enable All"
+    this.enable_all_channels_button.setAttribute("class", "control-buttons")
+    this.enable_all_channels_button.addEventListener("click", event => this.onEnableAllChannelsButtonClick(event));
+    this.enabled_ch_buttons_div.appendChild(this.enable_all_channels_button)
+
+    //create button to toggle plot options
+    this.disable_all_channels_button = document.createElement("div")
+    this.disable_all_channels_button.innerHTML = "Disable All"
+    this.disable_all_channels_button.setAttribute("class", "control-buttons")
+    this.disable_all_channels_button.addEventListener("click", event => this.onDisableAllChannelsButtonClick(event));
+    this.enabled_ch_buttons_div.appendChild(this.disable_all_channels_button)
+
+    //create div for enabled channels flags
     this.enabled_ch_div = document.createElement("div")
     this.enabled_ch_div.innerHTML = "Enabled Channels"
     this.enabled_ch_div.setAttribute("class", "enabled-ch-div")
@@ -220,6 +240,18 @@ class PlotWindow
     this.view.onConfigUpdated()
   }
 
+  onEnableAllChannelsButtonClick(event)
+  {
+    this.enabled_channels = [...this.all_channels]
+    this.updateEnabledChannelsOptions();
+  }
+
+  onDisableAllChannelsButtonClick(event)
+  {
+    this.enabled_channels = []
+    this.updateEnabledChannelsOptions();
+  }
+
   onPlotOptionsChanged()
   {
     console.log("Plot options changed cb")
@@ -235,6 +267,9 @@ class PlotWindow
     this.options_div.style.display = this.options_enabled ? "flex": "none"
 
     event.currentTarget.innerHTML = this.options_enabled ? "&#128200;" : "&#128295;"
+
+    //update config if options window is closed
+    if(!this.options_enabled) this.view.onConfigUpdated()
   }
 
   onPlotTypeChanged(event)
@@ -305,6 +340,8 @@ class PlotWindow
 
   plot(data)
   {
+    if(this.options_enabled) return;
+
     // console.log("Plot: " + JSON.stringify(data))
     if(data.hasOwnProperty("format"))
     {

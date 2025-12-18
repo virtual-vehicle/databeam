@@ -4,9 +4,7 @@ from vif.data_interface.base_config import BaseConfig
 from vif.data_interface.config_factory import ConfigFactory
 
 
-class FileBrowserConfig(BaseConfig):  # TODO adopt config name
-
-    # TODO replace with proper name/type of config (use lower_case)
+class FileBrowserConfig(BaseConfig):
     Name = 'filebrowser'
 
     @classmethod
@@ -17,5 +15,6 @@ class FileBrowserConfig(BaseConfig):  # TODO adopt config name
         cfg.string("username", "databeam")
         cfg.string("password", "default")
         cfg.boolean("allow_delete_data", False)
+        cfg.boolean("use_single_click", True)
 
         return cfg.get_config()

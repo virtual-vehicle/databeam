@@ -1,6 +1,7 @@
 """
 Math processor for live data
 """
+import logging
 import traceback
 from typing import Dict, Union, List, Optional
 import time
@@ -95,6 +96,12 @@ class Var:
     value: Optional[Union[int, float]]
 
 
+@dataclass
+class MathExpr:
+    as_str: str
+    expr: ast.expr
+
+
 @environ.config(prefix='')
 class ModuleEnv:
     MODULE_NAME = environ.var(help='Name of this instance', default='MathProcessor')
@@ -110,10 +117,28 @@ class MathProcessor(IOModule):
 
         self.variables_to_mod_channel: Dict[str, Var] = {}
         self.syntax_error_shown = False
+        self.expr_error_shown = False
 
-        self.math_expr: Optional[ast.expr] = None
+        self.math_expr: Dict[str, MathExpr] = {}
+        self.constants: Dict[str, float] = {}
 
     def command_validate_config(self, config) -> Status:
+        # verify constants
+        constant_keys = []
+        for c in config['constants']:
+            if len(c.split('=')) != 2:
+                return Status(error=True, title='invalid config', message=f'constants: {c}: not valid')
+            # check for duplicate keys
+            k, v = c.split('=')
+            if k in constant_keys:
+                return Status(error=True, title='invalid config', message=f'constants: {c}: duplicate key')
+            constant_keys.append(k)
+            # check if value is a float
+            try:
+                _ = float(v)
+            except ValueError:
+                return Status(error=True, title='invalid config', message=f'constants: {c}: value "{v}" not valid')
+
         # compare lengths of all lists
         nb_inputs = len(config['input_module_sub_mode_channel'])
         for li in ['input_names_internal']:
@@ -126,10 +151,22 @@ class MathProcessor(IOModule):
 
         for i in config['input_names_internal']:
             if len(i) < 1:
-                return Status(error=True, title='invalid config', message=f'input_names_internal not valid')
+                return Status(error=True, title='invalid config', message='input_names_internal not valid')
 
-        if len(config['result_channel_name']) < 1:
-            return Status(error=True, title='invalid config', message='result_channel_name not valid')
+        results = []
+        for calc in config['calculation']:
+            if len(calc.split('=')) != 2:
+                return Status(error=True, title='invalid config', message=f'calculation "{calc}": no "=" found')
+            res, c = calc.split('=')
+            res = res.strip()
+            c = c.strip()
+            if len(res) < 1:
+                return Status(error=True, title='invalid config', message=f'calculation "{calc}": no result name')
+            if len(c) < 1:
+                return Status(error=True, title='invalid config', message=f'calculation "{calc}": no expression')
+            if res in results:
+                return Status(error=True, title='invalid config', message=f'calculation "{calc}": duplicate result name')
+            results.append(res)
 
         use_custom_ids = False
         for x in config['input_module_dbid']:
@@ -156,6 +193,8 @@ class MathProcessor(IOModule):
         # reset flag that error was shown in GUI
         self.syntax_error_shown = False
         try:
+            self.constants = {c.split("=")[0]: float(c.split("=")[1]) for c in config['constants']}
+
             modules = []
             sub_all = []
             dbids = []
@@ -190,24 +229,34 @@ class MathProcessor(IOModule):
 
             self.module_interface.live_data_receiver.request_live_data(modules=modules, sub_all=sub_all,
                                                                        data_callback=self._data_received, db_ids=dbids)
+            math_expr = {}
+            for c in config['calculation']:
+                res, calc = c.split('=')
+                res = res.strip()
+                calc = calc.strip()
+                math_expr[res] = MathExpr(calc, ast.parse(calc, mode='eval').body)
+            self.math_expr = math_expr
 
-            self.math_expr = ast.parse(self.config_handler.config['calculation'], mode='eval').body
             return Status(error=False)
 
         except Exception as e:
             self.logger.error(f'error applying config: {type(e).__name__}: {e}\n{traceback.format_exc()}')
             return Status(error=True, title=type(e).__name__, message=str(e))
 
+    def command_prepare_sampling(self) -> None:
+        self.syntax_error_shown = False
+
     def command_get_schemas(self) -> List[Dict]:
         return [{
             'type': 'object',
             'properties': {
-                self.config_handler.config['result_channel_name']: {'type': 'number'}
+                res: {'type': 'number'} for res in self.math_expr.keys()
             }
         }]
 
     def _data_received(self, db_id: str, module: str, data: Dict) -> None:
         try:
+            # check if any internal variable is updated
             new_values = {}
             for name, var in self.variables_to_mod_channel.items():
                 if var.module == module:
@@ -217,17 +266,30 @@ class MathProcessor(IOModule):
             for k, v in new_values.items():
                 self.variables_to_mod_channel[k].value = v
 
-            # evaluate calculation expression
-            values = {k: v.value for k, v in self.variables_to_mod_channel.items()}
+            # evaluate calculation expressions
+            values = {k: v.value for k, v in self.variables_to_mod_channel.items()}  # add live data to variables
+            values.update(self.constants)  # add constants to variables
+
             # check if any value is None
             if not any(v is None for v in values.values()):
-                result = eval_expr(self.math_expr, values)
-                self.data_broker.data_in(time.time_ns(), {self.config_handler.config['result_channel_name']: result})
-        except SyntaxError as e:
+                # expressions are evaluated "top down" making results available for next expressions
+                results = {}
+                for res, expr in self.math_expr.items():
+                    try:
+                        result = eval_expr(expr.expr, values)
+                        values[res] = result  # update variables for next expression
+                        results[res] = result
+                    except Exception as e:
+                        if not self.expr_error_shown:
+                            self.expr_error_shown = True
+                            failing_expr = f'{res} = {expr.as_str}'
+                            self.module_interface.log_gui(f'EX eval_expr "{failing_expr}" {type(e).__name__}: {e}',
+                                                          log_severity=logging.ERROR)
+                self.data_broker.data_in(time.time_ns(), results)
+        except (SyntaxError, KeyError) as e:
             if not self.syntax_error_shown:
                 self.syntax_error_shown = True
-                self.logger.error(f'EX data_received - {type(e).__name__}: {e}')
-                self.module_interface.log_gui(f'{type(e).__name__}: {e}')
+                self.module_interface.log_gui(f'EX data_received {type(e).__name__}: {e}', log_severity=logging.ERROR)
         except Exception as e:
             self.logger.error(f'EX data_received ({data}) - {type(e).__name__}: {e}')
             self.logger.debug('EX traceback: \n%s', traceback.format_exc())

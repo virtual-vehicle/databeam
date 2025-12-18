@@ -2,6 +2,7 @@ import threading
 import traceback
 from typing import Optional
 import queue
+from contextlib import suppress
 
 
 from vif.data_interface.connection_manager import ConnectionManager, Key
@@ -41,10 +42,8 @@ def get_measurement_state(logger, cm: ConnectionManager, db_id: str) -> Optional
 
 def empty_queue(q):
     while not q.empty():
-        try:
+        with suppress(queue.Empty):
             q.get_nowait()
-        except queue.Empty:
-            pass
 
 
 def check_leftover_threads() -> str:

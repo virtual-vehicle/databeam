@@ -63,22 +63,28 @@ services:
       - LOGIN_PASSWORD_HASHES=37a8eec1ce19687d132fe29051dca629d164e2c4958ba141d5f4133a33f0688f  # 'default'
 
 include:
-  # - deploy/compose-files/docker-compose.autostart.yml
-  # - deploy/compose-files/docker-compose.autostop.yml
+  # IO Modules:
   # - deploy/compose-files/docker-compose.camera.yml
   # - deploy/compose-files/docker-compose.constant_publisher.yml
   # - deploy/compose-files/docker-compose.filter.yml
-  # - deploy/compose-files/docker-compose.gps_time_service.yml
   # - deploy/compose-files/docker-compose.math_processor.yml
   # - deploy/compose-files/docker-compose.modbus_tcp_forwarder.yml
   # - deploy/compose-files/docker-compose.nmea_gnss.yml
   # - deploy/compose-files/docker-compose.pid_controller.yml
   # - deploy/compose-files/docker-compose.ping.yml
   # - deploy/compose-files/docker-compose.plotter.yml
-  # - deploy/compose-files/docker-compose.startstop_forwarder.yml
   # - deploy/compose-files/docker-compose.system_monitor.yml
   # - deploy/compose-files/docker-compose.tcp_sink.yml
   # - deploy/compose-files/docker-compose.udp_sink.yml
+  # System Modules:
+  # - deploy/compose-files/docker-compose.autostart.yml
+  # - deploy/compose-files/docker-compose.autostop.yml
+  # - deploy/compose-files/docker-compose.database_sync.yml
+  # - deploy/compose-files/docker-compose.gps_time_service.yml
+  # - deploy/compose-files/docker-compose.startstop_forwarder.yml
+  # Misc:
+  # - deploy/compose-files/docker-compose.database.yml
+
 
 networks:
   internal_nw:

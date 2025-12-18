@@ -168,7 +168,7 @@ class ModuleInterface(LoggerMixin):
         except FileNotFoundError:
             # write default config
             self.__write_data_config()
-        except KeyError as e:
+        except KeyError:
             # update old version of data_config.json
             with self.data_config_path.open('r') as f:
                 temp_data_config = self.data_config.get_dict()

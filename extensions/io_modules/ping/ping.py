@@ -60,7 +60,6 @@ class Ping(IOModule):
         try:
             while not self._thread_stop_event.is_set():
                 if len(self._transmitters):
-                    t_start = time.time()
                     results = {k.destination: -1.0 for k in self._transmitters}
                     pings = [self._executor.submit(t.ping) for t in self._transmitters]
                     time_ping_executed = time.time_ns()
@@ -80,7 +79,6 @@ class Ping(IOModule):
                                 results[parsed.destination] = data
 
                     if not self._thread_stop_event.is_set():
-                        # self.logger.debug('%.2fs %s', time.time() - t_start, results)
                         self.data_broker.data_in(time_ping_executed, results)
 
                 # wait for timeout or killed thread

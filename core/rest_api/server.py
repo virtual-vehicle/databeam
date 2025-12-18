@@ -13,13 +13,13 @@ import json
 import random
 import string
 import hashlib
+import logging
 
 import docker
 import flask
 import flask_login
 import zipfly
-
-from flask import Flask, render_template, request, jsonify, make_response, stream_with_context, send_from_directory
+from flask import Flask, render_template, request, jsonify, make_response, send_from_directory
 from flask_cors import CORS
 from werkzeug.serving import make_server, BaseWSGIServer
 
@@ -29,23 +29,24 @@ from controller_api import ControllerAPI
 from file_api import FileAPI
 from preview_api import PreviewAPI
 
-import logging
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
+
 
 class User(flask_login.UserMixin):
     def __init__(self):
         pass
 
+
 class Server(LoggerMixin):
-    def __init__(self, *args, controller_api: ControllerAPI, file_api: FileAPI, preview_api: PreviewAPI, shutdown_queue,
-                 login_user_names_str: str, login_password_hashes_str: str, data_dir, logs_dir, secret_key, **kwargs):
+    def __init__(self, *args, controller_api: ControllerAPI, file_api: FileAPI, preview_api: PreviewAPI,
+                 login_user_names_str: str, login_password_hashes_str: str, data_dir, logs_dir, secret_key,
+                 use_internal_server: bool, **kwargs):
         super().__init__(*args, **kwargs)
 
         self._controller_api: ControllerAPI = controller_api
         self._file_api: FileAPI = file_api
         self._preview_api: PreviewAPI = preview_api
-        self._shutdown_queue: queue.Queue = shutdown_queue
         self._data_dir: Path = data_dir
         self._logs_dir: Path = logs_dir
 
@@ -76,7 +77,7 @@ class Server(LoggerMixin):
 
         self.app: Flask = Flask("REST Server")
         # set a random string
-        self.app.secret_key: str = secret_key
+        self.app.secret_key = secret_key
         self._login_manager: flask_login.LoginManager = flask_login.LoginManager(self.app)
         self._login_manager.init_app(self.app)
         self._login_manager.user_loader(self.user_loader)
@@ -91,7 +92,6 @@ class Server(LoggerMixin):
         self.app.add_url_rule('/stop_sampling', 'stop_sampling', self.route_stop_sampling, methods=['POST'])
         self.app.add_url_rule('/start', 'start', self.route_start, methods=['POST'])
         self.app.add_url_rule('/stop', 'stop', self.route_stop, methods=['POST'])
-        self.app.add_url_rule('/shutdown', 'shutdown', self.route_shutdown, methods=['GET'])
         self.app.add_url_rule('/modules', 'modules', self.route_modules, methods=['GET'])
         self.app.add_url_rule('/preview', 'preview', self.route_preview, methods=['POST'])
         self.app.add_url_rule('/meta', 'get_meta', self.route_get_meta, methods=['GET'])
@@ -125,10 +125,15 @@ class Server(LoggerMixin):
         self.app.add_url_rule('/system_cmd', 'system_command', self.route_system_command, methods=['POST'])
         self.app.add_url_rule('/download/logs', 'download_logs',
                               self.route_download_logs, methods=['GET'])
-        self._server: BaseWSGIServer = make_server('0.0.0.0', self._cfg['port'], self.app)
-        self._thread = threading.Thread(target=self._server.serve_forever)
-        self._thread.start()
-        self.logger.info("Flask Running")
+        # Only start werkzeug development server if shutdown_queue is provided
+        # When using Gunicorn, shutdown_queue will be None
+        if use_internal_server:
+            self._server: Optional[BaseWSGIServer] = make_server('0.0.0.0', self._cfg['port'], self.app)
+            threading.Thread(target=self._server.serve_forever, daemon=True).start()
+            self.logger.info("Flask Running (development mode)")
+        else:
+            self._server = None
+            self.logger.info("Flask app created (production mode - served by Gunicorn)")
 
     @flask_login.login_required
     def route_home(self):
@@ -162,7 +167,8 @@ class Server(LoggerMixin):
                 return jsonify(response)
 
             # compute stored password hash with padding
-            hash_padded = hashlib.sha256((self._user_dict[user_name] + self._random_hash_padding).encode('utf-8')).digest().hex()
+            hash_padded = hashlib.sha256((self._user_dict[user_name] + self._random_hash_padding).encode('utf-8')
+                                         ).digest().hex()
 
             # login user if password hashes match
             if password_hash == hash_padded:
@@ -276,13 +282,13 @@ class Server(LoggerMixin):
 
     @flask_login.login_required
     def route_docker_containers(self):
-        json = {"containers": []}
+        data = {"containers": []}
 
         try:
             containers_list = self._docker_client.containers.list(all=True)
         except Exception as e:
             self.logger.warning(f"Docker container list failed: {type(e)}: {e}")
-            return jsonify(json)
+            return jsonify(data)
 
         for container in containers_list:
             if container.status != 'running':
@@ -302,9 +308,9 @@ class Server(LoggerMixin):
                 "short_id": container.short_id,
                 "status": container.status
             }
-            json["containers"].append(container_dict)
+            data["containers"].append(container_dict)
 
-        return jsonify(json)
+        return jsonify(data)
 
     @flask_login.login_required
     def route_docker_logs(self, container_id: str):
@@ -420,13 +426,7 @@ class Server(LoggerMixin):
         cmd = data['cmd']
         return jsonify(self._controller_api.send_system_command(cmd))
 
-    @flask_login.login_required
-    def route_shutdown(self):
-        self._shutdown_queue.put("shutdown")
-        return jsonify({
-            'response': 'ok'
-        })
-
     def shutdown(self):
-        self._server.shutdown()
-        self.logger.info("Flask shutdown.")
+        if self._server is not None:
+            self._server.shutdown()
+            self.logger.info("Flask shutdown.")

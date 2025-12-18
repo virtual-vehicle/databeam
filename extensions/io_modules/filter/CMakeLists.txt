@@ -34,6 +34,7 @@ set(SRC_FILES
     source/filter.cpp
     source/FilterBase.cpp
     source/AverageFilter.cpp
+    source/DownsampleAverageFilter.cpp
     source/ExponentialAverageFilter.cpp
     source/MedianFilter.cpp
     ${SOURCE}/ModuleInterface.cpp

@@ -6,10 +6,10 @@
 <h2>Configuration</h2>
 <ul>
   <li><b>Input Module:</b> The string of the livedata topic to receive from [module_name/topic_name/rate],
-                           where rate is either liveall, or livedec.</li>
+                           where rate is either "liveall", or "livedec".</li>
   <li><b>Channels:</b> A string list of all channels to filter and output of the subscribed module/topic.</li>
   <li><b>Timebase:</b> The number of previous samples to account for in the filter. Can be set to samples (sample number) or time (seconds).</li>
-  <li><b>Timebase Value [samples/sec]:</b> The value representing the used filtering window. Can be sample number, time in seconds, or
+  <li><b>Timebase Value [samples or sec]:</b> The value representing the used filtering window. Can be sample number, time in seconds, or
     some other parameter (e.g. remembering constant tau). All have the same effect, that a higher value leads to more smoothing, but also more lagging.</li>
   <li><b>Method:</b> The type of filter to apply to the received data.</li>
 </ul>
@@ -18,6 +18,7 @@
 <ul>
   <li><b>Average:</b> A simple moving average filter, which averages for every timestep all N previous datapoints (samples)
     or all previous datapoints inside the last T seconds (time).</li>
+  <li><b>Downsampling Average:</b> Average of all datapoints received in the last "Timebase Value". Produces only one datapoint per timebase value.</li>
   <li><b>Exponential Average:</b> An exponentially decaying moving average. Utilizes a smooting factor alpha to combine every new
     datapoint with the previous ones, as can be read here: <a href="https://en.wikipedia.org/wiki/Exponential_smoothing">Wikipedia Source</a></li>.
     If timebase is set to time, the timebase value does not represent the window size anymore, but the a remembering constant tau.

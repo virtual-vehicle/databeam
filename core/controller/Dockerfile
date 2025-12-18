@@ -3,9 +3,10 @@ ARG DEPLOY_IMAGE=hello-world:invalid
 
 FROM ${BUILD_IMAGE} AS build-image
 
-COPY ./deploy/requirements_core.txt .
-COPY ./core/controller/requirements.txt .
-RUN pip install -r requirements_core.txt -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=bind,source=./deploy/requirements_core.txt,target=/tmp/requirements_core.txt \
+    --mount=type=bind,source=./core/controller/requirements.txt,target=/tmp/requirements.txt \
+    pip install -r /tmp/requirements_core.txt -r /tmp/requirements.txt
 
 
 FROM ${DEPLOY_IMAGE} AS deploy-image

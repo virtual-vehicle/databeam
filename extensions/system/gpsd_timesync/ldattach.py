@@ -1,5 +1,4 @@
 import array, fcntl, struct, termios, os
-import time
 
 fd = open("/dev/ttyS0", "wb")
 raw = struct.pack('@i', 18)

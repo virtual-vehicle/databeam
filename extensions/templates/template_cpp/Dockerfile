@@ -24,6 +24,11 @@ COPY extensions/io_modules/${MODULE_NAME}/documentation.html /
 
 FROM ${DEPLOY_IMAGE} AS deploy-image
 
+# RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+#     --mount=type=cache,target=/var/lib/apt,sharing=locked \
+#     apt-get update && \
+#     apt-get -y --no-install-recommends install ...
+
 COPY --from=build-image /main /main
 COPY --from=build-image /documentation.html /
 

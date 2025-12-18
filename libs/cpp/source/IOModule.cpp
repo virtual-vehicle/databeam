@@ -93,7 +93,7 @@ std::string IOModule::setConfig(Json& json)
     //return error string if validation failed
     if(validation_error_str != "") 
     {
-        logger->debug("Config invalid: " + validation_error_str);
+        logger->error("Config invalid: " + validation_error_str);
         return validation_error_str;
     }
 

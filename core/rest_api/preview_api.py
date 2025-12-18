@@ -4,6 +4,7 @@ Allows the Rest API to request preview measurement data for every module.
 
 import threading
 from typing import Optional, Dict, List, Tuple
+from collections import defaultdict
 
 from vif.websockets.websocket_api import WebSocketAPI
 from vif.logger.logger import LoggerMixin
@@ -16,7 +17,6 @@ class PreviewAPI(LoggerMixin):
         super().__init__(*args, **kwargs)
         self._controller_api = controller_api
         self._websocket_api = websocket_api
-        # self._request_dict: Dict[str, List[int]] = {}
         self._request_dict: Dict[int, Tuple[str, int]] = {}
 
         self._preview_thread: Optional[threading.Thread] = None
@@ -44,7 +44,7 @@ class PreviewAPI(LoggerMixin):
         while not self._shutdown_event.is_set():
             clients = self._websocket_api.get_client_ids()
 
-            modules_dict: Dict[str, List[Tuple[int, int]]] = {}
+            modules_dict: Dict[str, List[Tuple[int, int]]] = defaultdict(list)
 
             with self._request_lock:
                 # remove requests from disconnected clients
@@ -52,10 +52,7 @@ class PreviewAPI(LoggerMixin):
 
                 # create dict module -> list of clients
                 for client_id, (module_name, schema_index) in self._request_dict.items():
-                    if module_name not in modules_dict.keys():
-                        modules_dict[module_name] = [(client_id, schema_index)]
-                    else:
-                        modules_dict[module_name].append((client_id, schema_index))
+                    modules_dict[module_name].append((client_id, schema_index))
 
             # self.logger.debug("Fetch Preview: %s", modules_dict)
 

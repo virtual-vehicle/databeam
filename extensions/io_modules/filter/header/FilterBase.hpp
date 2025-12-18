@@ -35,6 +35,9 @@ class FilterBase
      */
     virtual void reset();
 
+    virtual bool ready_to_publish() { return true; }
+    virtual void publishing() {}
+
     void configureBase(Json& config);
     void updateData(long long time, double data, std::string channel);
     void setChannelNames(std::vector<std::string> channel_names);

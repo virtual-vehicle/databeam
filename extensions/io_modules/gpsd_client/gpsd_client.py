@@ -119,7 +119,7 @@ class GpsdClient(IOModule):
                             )}, schema_index=1, mcap=True, live=False, latest=False)
 
             except ConnectionRefusedError:
-                self.logger.error(f'ConnectionRefusedError: check gpsd and config!')
+                self.logger.error('ConnectionRefusedError: check gpsd and config!')
                 if not error_displayed:
                     # indicate in UI that target file does not exist
                     self.module_interface.log_gui("Gpsd: connection refused. Check gpsd and config!")

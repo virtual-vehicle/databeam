@@ -511,6 +511,25 @@ class Model {
     this.view.onConfigChanged()
   }
 
+  moveConfigArrayElement(config_index, array_index, move_up)
+  {
+    //get config entry
+    let entry = this.config_entries[config_index]
+    this.config_dirty = true
+
+    entry.moveArrayElement(array_index, move_up)
+
+    //updated config string and config inspector
+    this.config = JSON.stringify(this.config_json, null, 2)
+    let old_object_entries = this.getObjectConfigEntries(this.config_entries)
+    this.config_entries = []
+    this.root_config_entry = new ConfigEntry()
+    this.walkObject(this.config_json, this.root_config_entry)
+    this.restoreObjectEntryStates(old_object_entries)
+    this.setConfigEntryVisibility()
+    this.view.onConfigChanged()
+  }
+
   updateConfigEntry(config_index, array_index, value)
   {
     //get config entry

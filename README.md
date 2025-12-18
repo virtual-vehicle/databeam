@@ -12,7 +12,7 @@
 <br />
 <div align="center">
   <img src="doc/DATABEAM-pbVV-Logo_FINAL.png" alt="DataBeam logo" width="600">
-  <h3>Complete DAQ framework to enable complex measurement scenarios.</h3>
+  <h3>A DAQ framework to enable complex measurement scenarios.</h3>
 </div>
 
 <!-- TABLE OF CONTENTS -->
@@ -39,7 +39,7 @@
 </div> -->
 
 ## Overview
-DataBeam provides a **software solution to quickly set up complex measurement setups** where data from multiple devices need to be synchronized and recorded simultaneously.
+DataBeam provides a **software solution to quickly implement complex measurement setups** where data from multiple devices need to be synchronized and recorded simultaneously.
 
 It provides a **scalable, easy and standardized** method to integrate different types of data inputs and algorithms into a **centralized system**. DataBeam can support anything from low level hardware drivers to AI processing pipelines to create a **unified acquisition framework** which can be accessed conveniently via a **web browser**. Its web UI offers an intuitive interface for on-the-edge device management and monitoring from anywhere.
 

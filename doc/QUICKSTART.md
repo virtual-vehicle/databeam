@@ -13,6 +13,9 @@ git lfs install
 git clone https://github.com/virtual-vehicle/databeam.git
 cd databeam
 
+make develop
+(reboot)
+
 BUILD_LOCAL=1 make update
 BUILD_LOCAL=1 make core-apps module-ping
 ```
@@ -31,4 +34,4 @@ make run
 
 Go to http://localhost:5000 and login with `databeam` / `default`.
 
-<div align="right">(<a href="README.md">back to README</a>)</div>
+<div align="right">(<a href="../README.md">back to README</a>)</div>

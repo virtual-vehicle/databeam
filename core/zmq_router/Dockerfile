@@ -3,8 +3,9 @@ ARG DEPLOY_IMAGE=hello-world:invalid
 
 FROM ${BUILD_IMAGE} AS build-image
 
-COPY ./deploy/requirements_core.txt .
-RUN pip install -r requirements_core.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=bind,source=./deploy/requirements_core.txt,target=/tmp/requirements_core.txt \
+    pip install -r /tmp/requirements_core.txt
 
 
 FROM ${DEPLOY_IMAGE} AS deploy-image

@@ -13,6 +13,12 @@
 #include <rapidjson/writer.h>
 
 
+#ifdef _MSC_VER
+#  include <intrin.h>
+#  define __builtin_popcount __popcnt
+#endif
+
+
 #ifndef DEBUG_OUTPUT
 #define DEBUG_OUTPUT 0
 #endif
@@ -155,7 +161,7 @@ void set_field_value(const rapidjson::Value& value, const char* field_name, fiel
 /// @param topic only parse messages of this topic
 /// @param quiet don't print anything
 /// @return empty string on success, error message on failure
-std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string topic, uint64_t start_time_ns,
+std::tuple<std::string, int> parse_mcap(py::array& py_array, std::string mcap_path, std::string topic, uint64_t start_time_ns,
                        bool quiet)
 {
 #if DEBUG_OUTPUT
@@ -229,7 +235,7 @@ std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string t
             if (!quiet) {
                 std::cerr << "ERROR: " << res.message << std::endl;
             }
-            return "failed to open mcap file";
+            return std::make_tuple("failed to open mcap file", 0);
         }
     }
 
@@ -271,7 +277,7 @@ std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string t
             if (!quiet) {
                 std::cerr << "JSON parse error of message: " << it->message.data << std::endl;
             }
-            return std::string("JSON parse error in message ") + std::to_string(cnt);
+            return std::make_tuple(std::string("JSON parse error in message ") + std::to_string(cnt), cnt);
         }
 
         char* row_ptr = data_ptr + cnt * row_stride;
@@ -327,6 +333,9 @@ std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string t
             // check if "field" is in dtype
             std::unordered_map<std::string, field_details>::iterator details_it = details.find(field);
             if (details_it == details.end()) {
+                if (!quiet) {
+                    std::cerr << "ERROR in message " << cnt << ": unknown field " << field << std::endl;
+                }
                 continue;
             }
             
@@ -363,7 +372,299 @@ std::string parse_mcap(py::array& py_array, std::string mcap_path, std::string t
     }
 #endif
 
-    return "";
+    return std::make_tuple("", cnt);
+}
+
+enum TypeBits : uint32_t
+{
+    T_NULL = 1 << 0,
+    T_BOOL = 1 << 1,
+    T_INT = 1 << 2,
+    T_NUM = 1 << 3,
+    T_STR = 1 << 4,
+    T_OBJ = 1 << 5,
+    T_ARR = 1 << 6
+};
+
+struct SchemaNode
+{
+    uint32_t types = 0;
+
+    size_t max_strlen = 0;
+
+    // Object fields (indirection!)
+    std::unordered_map<std::string, std::unique_ptr<SchemaNode>> props;
+    std::unordered_map<std::string, uint64_t> prop_present_count;
+    uint64_t seen_objects = 0;
+
+    // Array items (indirection!)
+    std::unique_ptr<SchemaNode> items;
+
+    void merge(const SchemaNode &other)
+    {
+        types |= other.types;
+
+        max_strlen = std::max(max_strlen, other.max_strlen);
+
+        if (other.seen_objects)
+        {
+            seen_objects += other.seen_objects;
+            for (const auto &kv : other.props)
+            {
+                auto &dstPtr = props[kv.first];
+                if (!dstPtr)
+                    dstPtr = std::make_unique<SchemaNode>();
+                dstPtr->merge(*kv.second);
+            }
+            for (const auto &kv : other.prop_present_count) {
+                prop_present_count[kv.first] += kv.second;
+            }
+        }
+
+        if (other.items)
+        {
+            if (!items)
+                items = std::make_unique<SchemaNode>();
+            items->merge(*other.items);
+        }
+    }
+};
+// helpers
+inline SchemaNode &ensure_child(std::unique_ptr<SchemaNode> &p)
+{
+    if (!p)
+        p = std::make_unique<SchemaNode>();
+    return *p;
+}
+inline SchemaNode &ensure_prop(SchemaNode &node, const std::string &key)
+{
+    auto &p = node.props[key];
+    if (!p)
+        p = std::make_unique<SchemaNode>();
+    return *p;
+}
+
+static inline bool isInteger(const rapidjson::Value &v)
+{
+    if (!v.IsNumber())
+        return false;
+    // RapidJSON can distinguish
+    return v.IsInt64() || v.IsUint64();
+}
+
+void inferValue(SchemaNode &node, const rapidjson::Value &v);
+
+void inferObject(SchemaNode &node, const rapidjson::Value &v)
+{
+    node.types |= T_OBJ;
+    node.seen_objects += 1;
+    for (auto it = v.MemberBegin(); it != v.MemberEnd(); ++it) {
+        const std::string key(it->name.GetString(), it->name.GetStringLength());
+        node.prop_present_count[key] += 1;
+        inferValue(ensure_prop(node, key), it->value);
+    }
+}
+
+void inferArray(SchemaNode &node, const rapidjson::Value &v)
+{
+    node.types |= T_ARR;
+    for (auto it = v.Begin(); it != v.End(); ++it) {
+        inferValue(ensure_child(node.items), *it);
+    }
+}
+
+void inferValue(SchemaNode &node, const rapidjson::Value &v)
+{
+    //   if (v.IsNull()) { node.types |= T_NULL; return; }
+    if (v.IsNull()) { return; }
+    if (v.IsNumber()) { node.types |= T_NUM; return; }
+    if (v.IsInt64() || v.IsUint64()) { node.types |= T_INT; return; }
+    if (v.IsBool()) { node.types |= T_BOOL; return; }
+    if (v.IsString()) {
+        node.types |= T_STR;
+        node.max_strlen = std::max(node.max_strlen, size_t(v.GetStringLength()));
+        return;
+    }
+    if (v.IsArray()) { inferArray(node, v); return; }
+    if (v.IsObject()) { inferObject(node, v); return; }
+}
+
+void typesToJson(rapidjson::Value &out, uint32_t types, rapidjson::Document::AllocatorType &a)
+{
+    // Map bitmask -> JSON Schema "type"
+    auto pushType = [&](const char *t)
+    {
+        rapidjson::Value s;
+        s.SetString(t, a);
+        out.PushBack(s, a);
+    };
+    int count = __builtin_popcount(types);
+    if (count <= 1)
+    {
+        const char *t = nullptr;
+        if (types & T_NULL) t = "null";
+        else if (types & T_BOOL) t = "boolean";
+        else if (types & T_INT) t = "integer";
+        else if (types & T_NUM) t = "number";
+        else if (types & T_STR) t = "string";
+        else if (types & T_OBJ) t = "object";
+        else if (types & T_ARR) t = "array";
+        if (t) {
+            out.SetString(t, a);
+        }
+    }
+    else
+    {
+        out.SetArray();
+        if (types & T_NULL) pushType("null");
+        if (types & T_BOOL) pushType("boolean");
+        // If both integer and number seen, keep both
+        if (types & T_INT) pushType("integer");
+        if (types & T_NUM) pushType("number");
+        if (types & T_STR) pushType("string");
+        if (types & T_OBJ) pushType("object");
+        if (types & T_ARR) pushType("array");
+    }
+}
+
+void nodeToSchema(const SchemaNode &node, rapidjson::Value &out, rapidjson::Document::AllocatorType &a)
+{
+    out.SetObject();
+
+    // type / types
+    rapidjson::Value typeVal;
+    typesToJson(typeVal, node.types, a);
+    out.AddMember("type", typeVal, a);
+
+    if (node.types & T_STR) {
+        out.AddMember("maxLength", rapidjson::Value(node.max_strlen).SetUint64(node.max_strlen), a);
+    }
+
+    if (node.types & T_OBJ)
+    {
+        rapidjson::Value props(rapidjson::kObjectType);
+        for (const auto &kv : node.props)
+        {
+            rapidjson::Value k;
+            k.SetString(kv.first.c_str(), (rapidjson::SizeType)kv.first.size(), a);
+            rapidjson::Value sub(rapidjson::kObjectType);
+            nodeToSchema(*kv.second, sub, a);
+            props.AddMember(k, sub, a);
+        }
+        out.AddMember("properties", props, a);
+    }
+
+    if (node.types & T_ARR)
+    {
+        rapidjson::Value itemsV(rapidjson::kObjectType);
+        if (node.items) {
+            nodeToSchema(*node.items, itemsV, a);
+        } else {
+            itemsV.AddMember("type", rapidjson::Value().SetString("null", a), a);
+        }
+        out.AddMember("items", itemsV, a);
+    }
+}
+
+std::string toJsonString(const rapidjson::Value &v)
+{
+    rapidjson::StringBuffer sb;
+    rapidjson::Writer<rapidjson::StringBuffer> w(sb);
+    v.Accept(w);
+    return sb.GetString();
+}
+
+std::string find_mcap_schema(std::string mcap_path, std::string topic, bool quiet)
+{
+#if DEBUG_OUTPUT
+    auto start_wall = std::chrono::high_resolution_clock::now();
+    std::clock_t start_cpu = std::clock();
+#endif
+
+    mcap::McapReader reader;
+    {
+        const auto res = reader.open(mcap_path);
+        if (!res.ok()) {
+            if (!quiet) {
+                std::cerr << "ERROR: " << res.message << std::endl;
+            }
+            return "failed to open mcap file";
+        }
+    }
+
+    // only load specified topic
+    mcap::ReadMessageOptions options;
+    options.topicFilter = [topic](const std::string_view _topic) {
+        return _topic == topic;
+    };
+
+    mcap::ProblemCallback problemCallback = [quiet](const mcap::Status& status) {
+        if (!quiet) {
+            std::cerr << "ERROR parse-problem: " << status.message << std::endl;
+        }
+    };
+
+    size_t cnt = 0;
+    SchemaNode schema;
+    mcap::LinearMessageView messageView = reader.readMessages(problemCallback, options);
+
+    for (mcap::LinearMessageView::Iterator it = messageView.begin(); it != messageView.end(); it++)
+    {
+        // skip any non-json-encoded messages.
+        if (it->channel->messageEncoding != "json")
+        {
+            if (!quiet) {
+                std::cerr << "not a JSON message: " << it->channel->messageEncoding << std::endl;
+            }
+            continue;
+        }
+
+        rapidjson::Document doc;
+        if (doc.Parse(reinterpret_cast<const char *>(it->message.data), it->message.dataSize).HasParseError())
+        {
+            if (!quiet) {
+                std::cerr << "JSON parse error of message: " << it->message.data << std::endl;
+            }
+            return std::string("JSON parse error in message ") + std::to_string(cnt);
+        }
+
+        inferValue(schema, doc);
+        cnt += 1;
+    }
+
+    reader.close();
+    if (!quiet) {
+        std::cout << "\rFinished " << topic << " parsing " << cnt << " messages." << std::endl;
+    }
+
+#if DEBUG_OUTPUT
+    std::clock_t end_cpu = std::clock();
+    auto end_wall = std::chrono::high_resolution_clock::now();
+
+    double wall_ms = std::chrono::duration<double>(end_wall - start_wall).count();
+    double cpu_ms = (double)(end_cpu - start_cpu) / CLOCKS_PER_SEC;
+    if (!quiet) {
+        std::cout << ">> Wall time: " << wall_ms << " s" << std::endl;
+        std::cout << ">> CPU time: " << cpu_ms << " s" << std::endl;
+    }
+#endif
+
+    rapidjson::Document out;
+    out.SetObject();
+    auto& a = out.GetAllocator();
+
+    rapidjson::Value rootSchema;
+    nodeToSchema(schema, rootSchema, a);
+    out.AddMember("type", rootSchema["type"], a); // shallow copy ok here
+    if (rootSchema.HasMember("properties")) out.AddMember("properties", rootSchema["properties"], a);
+    // if (rootSchema.HasMember("required")) out.AddMember("required", rootSchema["required"], a);
+    if (rootSchema.HasMember("items")) out.AddMember("items", rootSchema["items"], a);
+
+    std::string outStr = toJsonString(out);
+    std::cout << "=== Topic Schema: " << topic << " ===\n";
+    std::cout << outStr << "\n\n";
+
+    return outStr;
 }
 
 PYBIND11_MODULE(_core, m)
@@ -373,6 +674,9 @@ PYBIND11_MODULE(_core, m)
     m.def("parse_mcap", &parse_mcap, "parse mcap file and decode JSON messages",
           py::arg("py_array"), py::arg("mcap_path"), py::arg("topic"), py::arg("start_time_ns") = 0,
           py::arg("quiet") = false);
+
+    m.def("find_mcap_schema", &find_mcap_schema, "find mcap schema",
+          py::arg("mcap_path"), py::arg("topic"), py::arg("quiet") = false);
 
 #ifdef VERSION_INFO
     m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);

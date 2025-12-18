@@ -1,10 +1,12 @@
 """
-Starts the Rest API and WebGUI.
+Unified entry point for the Rest API and WebGUI.
+Supports both development mode (python main.py) and production mode (gunicorn).
 """
+import atexit
 import secrets
 import threading
+import traceback
 from pathlib import Path
-import queue
 import signal
 import logging
 
@@ -36,82 +38,119 @@ class RestEnv:
     # hashlib.sha256("plaintext".encode('utf-8')).hexdigest()
     # or
     # echo -n "plaintext" | sha256sum | tr -d "[:space:]-"
-    LOGIN_PASSWORD_HASHES = environ.var(help='sha256 hash of rest api password as hex string')
+    LOGIN_PASSWORD_HASHES = environ.var(help='sha256 hash of rest api password as hex string',
+                                        default='37a8eec1ce19687d132fe29051dca629d164e2c4958ba141d5f4133a33f0688f')
     # optionally provide an external secret key (https://flask.palletsprojects.com/en/stable/quickstart/#sessions)
     SECRET_KEY = environ.var(help='secret key for flask', default=secrets.token_hex())
 
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
+def exit_thread_check(logger: logging.Logger):
+    num_threads_left = threading.active_count() - 1
+    logger.debug(f'done - threads left: {num_threads_left}')
+    if num_threads_left > 0:
+        logger.info(f'threads left: {[thread.name for thread in threading.enumerate()]}')
+
+
+def initialize():
+    # Load environment configuration
     env_cfg = environ.to_config(RestEnv)
 
+    # Configure logging
     LoggerMixin.configure_logger(level=env_cfg.LOGLEVEL)
-    logger_main = logging.getLogger('REST-main')
+    logger = logging.getLogger('REST-main')
 
-    shutdown_queue = queue.Queue()
+    # Create shutdown handling events
     shutdown_ev = threading.Event()
+    shutdown_done_ev = threading.Event()
 
-    for sig in signal.valid_signals():
-        try:
-            signal.signal(sig, lambda signum, frame: log_reentrant(f'UNHANDLED signal {signum} called'))
-        except OSError:
-            pass
+    # Initialize singleton services at module level
+    logger.info("Initializing singleton services...")
 
-    # ignore child signal
-    signal.signal(signal.SIGCHLD, signal.SIG_DFL)
-
-    # handle shutdown signals
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(sig, lambda signum, frame: (shutdown_ev.set(), shutdown_queue.put("shutdown"),
-                                                  log_reentrant(f'signal {signum} called -> shutdown!')))
-
-    # create websocket server
+    # Create websocket server
     websocket_api = WebSocketAPI(ip="0.0.0.0", port=5001)
 
-    # create connection to databeam controller
-    controller_api = ControllerAPI(databeam_id=env_cfg.DB_ID, websocket_api=websocket_api, shutdown_ev=shutdown_ev,
-                                   db_router=env_cfg.DB_ROUTER)
+    # Create connection to databeam controller
+    controller_api = ControllerAPI(
+        databeam_id=env_cfg.DB_ID,
+        websocket_api=websocket_api,
+        shutdown_ev=shutdown_ev,
+        db_router=env_cfg.DB_ROUTER
+    )
+
+    # Create file API
+    file_api = FileAPI(
+        data_dir=env_cfg.DATA_DIR / env_cfg.DEPLOY_VERSION,
+        logs_dir=env_cfg.LOGS_DIR / env_cfg.DEPLOY_VERSION
+    )
+
+    # Create preview api
+    preview_api = PreviewAPI(
+        controller_api=controller_api,
+        websocket_api=websocket_api
+    )
+
+    # Create Flask server
+    flask_server = Server(
+        controller_api=controller_api,
+        file_api=file_api,
+        preview_api=preview_api,
+        login_user_names_str=env_cfg.LOGIN_USER_NAMES,
+        login_password_hashes_str=env_cfg.LOGIN_PASSWORD_HASHES,
+        data_dir=env_cfg.DATA_DIR / env_cfg.DEPLOY_VERSION,
+        logs_dir=env_cfg.LOGS_DIR / env_cfg.DEPLOY_VERSION,
+        secret_key=env_cfg.SECRET_KEY,
+        use_internal_server=True if __name__ == '__main__' else False
+    )
+
+    # Expose the Flask app for Gunicorn
+    app = flask_server.app
+
+    def shutdown_services():
+        logger.info("Shutting down services...")
+        shutdown_ev.set()
+        try:
+            preview_api.shutdown()
+            flask_server.shutdown()
+            websocket_api.shutdown()
+            controller_api.shutdown()
+            logger.info("All services shut down successfully")
+        except Exception as e:
+            logger.error(f"Error during service shutdown: {type(e).__name__}: {e}\n{traceback.format_exc()}")
+        shutdown_done_ev.set()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        # make sure not to overwrite gunicorn signal handlers
+        original_handler = signal.getsignal(sig)
+        signal.signal(sig, lambda signum, frame: (
+            log_reentrant(f'WHEE signal {signum} called -> shutdown!'),
+            threading.Thread(target=shutdown_services, daemon=True).start(),
+            original_handler(signum, frame) if callable(original_handler) else None
+        ))
+
+    atexit.register(lambda: (
+        logger.info("Waiting for shutdown to finish..."),
+        shutdown_done_ev.wait(),
+        exit_thread_check(logger),
+        logger.info("Shutdown done.")
+    ))
+
+    logger.info("Starting background services...")
     controller_api.start()
-
-    file_api = FileAPI(data_dir=env_cfg.DATA_DIR / env_cfg.DEPLOY_VERSION,
-                       logs_dir=env_cfg.LOGS_DIR / env_cfg.DEPLOY_VERSION)
-
-    logger_main.info('Modules: %s', str(controller_api.get_modules_dict()))
-    logger_main.info('Data Configs: %s', str(controller_api.get_modules_and_data_config_dict()))
-    #print(str(controller_api.get_measurement_state_dict()))
-    # data_config = controller_api.get_data_config_dict("Ping")
-    # logger_main.debug("Ping Data Config: " + str(data_config))
-    #set_meta = controller_api.set_metadata_strings(metadata['system_meta_json'], metadata['user_meta_json'])
-    #print("SET META: " + str(set_meta))
-
-    # start websocket server
+    logger.info('Modules: %s', str(controller_api.get_modules_dict()))
+    logger.info('Data Configs: %s', str(controller_api.get_modules_and_data_config_dict()))
     websocket_api.start_server()
-
-    # create preview api
-    preview_api = PreviewAPI(controller_api=controller_api, websocket_api=websocket_api)
     preview_api.start()
 
-    # start server
-    flask_server = Server(controller_api=controller_api, file_api=file_api, preview_api=preview_api,
-                          shutdown_queue=shutdown_queue, login_user_names_str=env_cfg.LOGIN_USER_NAMES,
-                          login_password_hashes_str=env_cfg.LOGIN_PASSWORD_HASHES,
-                          data_dir=env_cfg.DATA_DIR / env_cfg.DEPLOY_VERSION,
-                          logs_dir=env_cfg.LOGS_DIR / env_cfg.DEPLOY_VERSION,
-                          secret_key=env_cfg.SECRET_KEY)
+    logger.info("All background services started successfully")
 
-    # wait for signals
+    if __name__ == '__main__':
+        # return event for development mode
+        return shutdown_ev
+    else:
+        # return app for gunicorn
+        return app
+
+
+if __name__ == '__main__':
+    shutdown_ev = initialize()
     shutdown_ev.wait()
-
-    # print shutdown message
-    logger_main.info("Shutdown servers ...")
-
-    # shutdown server
-    preview_api.shutdown()
-    flask_server.shutdown()
-    websocket_api.shutdown()
-    controller_api.shutdown()
-
-    num_threads_left = threading.active_count() - 1
-    logger_main.debug(f'done - threads left: {num_threads_left}')
-    if num_threads_left > 0:
-        logger_main.info(f'threads left: {[thread.name for thread in threading.enumerate()]}')

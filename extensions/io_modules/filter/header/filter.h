@@ -47,4 +47,5 @@ private:
     FilterBase* filter;
     std::mutex filter_lock;
     std::string subscribed_topic = "";
+    std::string channel_suffix = "";
 };

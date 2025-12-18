@@ -3,10 +3,12 @@ FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 # install gpsd and chrony
-RUN apt-get -y install chrony gpsd pps-tools
-
 # install gpsmon debug tool
-RUN apt-get -y --no-install-recommends install gpsd-clients
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    apt-get -y install chrony gpsd pps-tools && \
+    apt-get -y --no-install-recommends install gpsd-clients
 
 COPY ./extensions/system/gpsd_timesync/chrony.conf /etc/chrony/chrony.conf_orig
 COPY ./extensions/system/gpsd_timesync/run.sh /run.sh

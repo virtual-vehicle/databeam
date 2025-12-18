@@ -453,7 +453,7 @@ std::string ModuleInterface::notify_queryable(std::string topic, std::string pay
     }
     else if(data_config_query.cmd == ModuleDataConfigCmd::SET)
     {
-      logger->debug("DataConfig SET"); //TODO store new data config
+      logger->debug("DataConfig SET");
       data_config.store(&data_config_query);
       Status status(false);
       ModuleDataConfigReply module_data_config_reply(status);

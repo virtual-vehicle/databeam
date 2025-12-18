@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include "AverageFilter.hpp"
+#include "DownsampleAverageFilter.hpp"
 #include "ExponentialAverageFilter.hpp"
 #include "MedianFilter.hpp"
 
@@ -17,11 +18,12 @@ FilterModule::FilterModule(EnvConfig* env_config)
     this->env_config = env_config;
 
     ConfigFactory cfg;
-    cfg.string("input_module", "module/topic");
+    cfg.string("input_module", "module/topic/liveall");
     cfg.string_array("channels", {"channel"}).resizeable();
     cfg.string("timebase", "samples").select({"samples", "time"});
     cfg.number("timebase_value", 10.0);
-    cfg.string("method", "average").select({"average", "exponential_average", "median"});
+    cfg.string("method", "average").select({"average", "downsample_average", "exponential_average", "median"});
+    cfg.string("output_channel_suffix", "_filtered");
 
     default_config = cfg.get_json_str();
 
@@ -93,6 +95,11 @@ void FilterModule::applyConfig(Json& json)
         logger->info("Set new moving average filter.");
         this->filter = new AverageFilter();
     }
+    else if(filter_type == "downsample_average")
+    {
+        logger->info("Set new averaging downsampling filter.");
+        this->filter = new DownsampleAverageFilter();
+    }
     else if(filter_type == "exponential_average")
     {
         logger->info("Set new exponential moving average filter.");
@@ -114,6 +121,8 @@ void FilterModule::applyConfig(Json& json)
         return;
     }
 
+    this->channel_suffix = config_json.getString("output_channel_suffix");
+
     this->filter->setChannelNames(this->config_json.getStringArray("channels"));
     this->filter->configureBase(this->config_json);
     this->filter->configure(this->config_json);
@@ -125,6 +134,7 @@ void FilterModule::applyConfig(Json& json)
 
 bool FilterModule::prepareStartSampling()
 {
+    filter->clearData();
     return true;
 }
 
@@ -173,7 +183,7 @@ std::vector<McapSchema> FilterModule::getMcapSchemas()
     for(size_t i = 0; i < channels_list.size(); i++)
     {
         std::string channel_name = channels_list[i];
-        module_schema.addProperty(channel_name + "_filtered", "number");
+        module_schema.addProperty(channel_name + this->channel_suffix, "number");
     }
 
     schema_list.push_back(module_schema);
@@ -182,9 +192,6 @@ std::vector<McapSchema> FilterModule::getMcapSchemas()
 
 void FilterModule::notify_subscriber(std::string key, std::string payload)
 {
-    TimeSource time_source;
-    long long curr_time = time_source.now();
-
     // This only happens when we configure new filters, which restarts the filter process.
     // We do not need any previous data anymore and can just return instead of wait.
     bool lock_free = this->filter_lock.try_lock();
@@ -217,12 +224,19 @@ void FilterModule::notify_subscriber(std::string key, std::string payload)
             continue;
 
         double filtered_value = this->filter->compute(channel);
-        json_writer.write(std::string(channel + "_filtered"), filtered_value);
+
+        if (this->filter->ready_to_publish()) {
+            json_writer.write(std::string(channel + this->channel_suffix), filtered_value);
+        }
     }
 
-    data_broker->lock(); 
-    data_broker->data_in((uint64_t) payload_ts, json_writer);
-    data_broker->unlock();
+    if (this->filter->ready_to_publish())
+    {
+        this->filter->publishing();
+        data_broker->lock();
+        data_broker->data_in((uint64_t) payload_ts, json_writer);
+        data_broker->unlock();
+    }
 
     this->filter_lock.unlock();
 }

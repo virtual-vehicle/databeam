@@ -6,7 +6,7 @@ ifneq (,$(wildcard ./.env))
 endif
 
 # default platform:
-# PLATFORM ?= linux/amd64,linux/arm64
+BASE_PLATFORM ?= linux/amd64,linux/arm64
 PLATFORM ?= linux/amd64
 MODE ?= push
 DOCKER_REGISTRY ?= docker.io
@@ -84,7 +84,7 @@ endef
 # # --- docker build ---
 define buildx_base
 	$(call clean_base_images)
-	deploy/scripts/buildx.sh $(IMG_BASE)_$(1) deploy/docker-base-images/Dockerfile.$(1) linux/amd64,linux/arm64 $(MODE) --build-arg IMAGE=$(2)
+	deploy/scripts/buildx.sh $(IMG_BASE)_$(1) deploy/docker-base-images/Dockerfile.$(1) $(BASE_PLATFORM) $(MODE) --build-arg IMAGE=$(2)
 endef
 
 # build function

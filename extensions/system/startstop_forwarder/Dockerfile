@@ -4,16 +4,20 @@ ARG DEPLOY_IMAGE=hello-world:invalid
 FROM ${BUILD_IMAGE} AS build-image
 ARG MODULE_NAME=startstop_forwarder
 
-COPY ./deploy/requirements_core.txt .
-COPY ./deploy/requirements_module.txt .
-COPY ./extensions/system/${MODULE_NAME}/requirements.txt .
-RUN pip install -r requirements_core.txt -r requirements_module.txt -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=bind,source=./deploy/requirements_core.txt,target=/tmp/requirements_core.txt \
+    --mount=type=bind,source=./deploy/requirements_module.txt,target=/tmp/requirements_module.txt \
+    --mount=type=bind,source=./extensions/system/${MODULE_NAME}/requirements.txt,target=/tmp/requirements.txt \
+    pip install -r /tmp/requirements_core.txt -r /tmp/requirements_module.txt -r /tmp/requirements.txt
 
 
 FROM ${DEPLOY_IMAGE} AS deploy-image
 ARG MODULE_NAME=startstop_forwarder
 
-RUN apt-get -y --no-install-recommends install avahi-daemon avahi-utils libnss-mdns
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    apt-get -y --no-install-recommends install avahi-daemon avahi-utils libnss-mdns
 RUN printf "[server]\nenable-dbus=no\n" >> /etc/avahi/avahi-daemon.conf
 COPY extensions/system/${MODULE_NAME}/entrypoint.sh /
 RUN chmod +x /entrypoint.sh

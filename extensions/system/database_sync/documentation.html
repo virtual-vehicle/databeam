@@ -1,0 +1,22 @@
+<h2>Description</h2>
+<p>
+    Synchronize data from MCAP measurements to TimescaleDB database.<br>
+    For each module topic, a table will be created in the database.
+</p>
+
+<h2>Configuration</h2>
+<ul>
+  <li><b>Start Sync:</b> manually start synchronization</li>
+  <li><b>Stop Sync:</b> stop currently running synchronization</li>
+  <li><b>Force Re-Sync:</b> try to upload data with all timestamps (not only the latest)</li>
+  <li><b>Sync On Capture Stop:</b> automatically sync when capture is stopped</li>
+  <li><b>Delay before start [s]:</b> wait a little before starting the synchronization</li>
+  <li><b>Db Host Port:</b> host:port of the timescaledb instance</li>
+  <li><b>Db User:</b> timescaledb username</li>
+  <li><b>Db Password:</b> timescaledb password</li>
+  <li><b>Db Name:</b> timescaledb database name</li>
+  <li><b>Sync Modules:</b> list of module names to sync</li>
+</ul>
+
+<h2>Known Issues</h2>
+Currently only floating-point values are supported.

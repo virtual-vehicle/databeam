@@ -27,6 +27,8 @@ class OscilloscopePlot extends Plot
     
     //read config parameters
     this.ts_key = plot_options.hasOwnProperty("ts_key") ? plot_options["ts_key"] : "rel_time"
+    this.y_min = plot_options.hasOwnProperty("y_min") ? plot_options["y_min"] : 0
+    this.y_max = plot_options.hasOwnProperty("y_max") ? plot_options["y_max"] : 0
 
     let self = this
 
@@ -135,6 +137,38 @@ class OscilloscopePlot extends Plot
     this.options_div = div
     this.options_div.innerHTML = ""
     this.addOption("Array Timestamp Key", Utils.createTextInput(this.ts_key, event => this.onTsKeyChanged(event)))
+    this.addOption("Y Min", Utils.createTextInput(this.y_min, event => this.onYminChanged(event)))
+    this.addOption("Y Max", Utils.createTextInput(this.y_max, event => this.onYmaxChanged(event)))
+  }
+
+  updateYAxis()
+  {
+    if(this.y_min != this.y_max)
+        this.line_plot.setScale("y", {min: this.y_min, max: this.y_max});
+    else
+        this.line_plot.setScale("y", {auto: true});
+  }
+
+  onYminChanged(event)
+  {
+    let new_y_min = parseFloat(event.currentTarget.value);
+    if(new_y_min <= this.y_max)
+        this.y_min = new_y_min;
+    else
+        event.currentTarget.value = this.y_min;
+
+    this.optionsChangedCB();
+  }
+
+  onYmaxChanged(event)
+  {
+    let new_y_max = parseFloat(event.currentTarget.value);
+    if(new_y_max >= this.y_min)
+        this.y_max = new_y_max;
+    else
+        event.currentTarget.value = this.y_max;
+
+    this.optionsChangedCB();
   }
 
   onTsKeyChanged(event)
@@ -165,6 +199,7 @@ class OscilloscopePlot extends Plot
    */
   plot(keys, values, module_changed)
   {
+    this.updateYAxis();
     this.updateLines(keys, values)
 
     let rel_time_key_exists = keys.indexOf(this.ts_key) !== -1;

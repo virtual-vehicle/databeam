@@ -11,7 +11,8 @@ from werkzeug.serving import make_server
 from vif.data_interface.config_handler import ConfigHandler
 
 from vif.data_interface.live_data_receiver import LiveDataReceiver
-from vif.websockets.websocket_api import WebSocketAPI
+#from vif.websockets.websocket_api import WebSocketAPI
+from vif.websockets.asyncwebsocket_api import AsyncWebSocketAPI
 from vif.data_interface.connection_manager import ConnectionManager, Key
 
 from vif.data_interface.network_messages import ModuleRegistryQueryCmd, ModuleRegistryQuery, ModuleRegistryReply
@@ -22,7 +23,7 @@ log.setLevel(logging.ERROR)
 
 class Server:
     def __init__(self, cm: ConnectionManager, databeam_id, port: int, shutdown_queue, live_data_receiver: LiveDataReceiver,
-                 config_handler: ConfigHandler, websocket_api: WebSocketAPI):
+                 config_handler: ConfigHandler, websocket_api: AsyncWebSocketAPI):
         self.logger = logging.getLogger('Server')
         self.cm = cm
         self._databeam_id = databeam_id
@@ -99,22 +100,7 @@ class Server:
             topics_dict[module] = self.get_module_schemas(module)
 
         self.logger.debug({'modules': modules_list, 'meta': meta_dict, 'topics': topics_dict})
-
-        module_topic_list = []
-        topic_meta_dict = {}
-
-        #for module in modules_list:
-        #    if len(topics_dict[module]) == 0:
-        #        module_topic_list.append(module)
-        #        topic_meta_dict[module] = meta_dict[module]
-        #        continue
-
-        #    for topic in topics_dict[module]:
-        #        module_topic_list.append(f'{module}/{topic}')
-        #        topic_meta_dict[f'{module}/{topic}'] = meta_dict[module]
-
         return {'modules': modules_list, 'meta': meta_dict}
-        #return {'modules': module_topic_list, 'meta': topic_meta_dict, 'topics': [] * len(module_topic_list)}
 
     def get_module_meta(self, module_name):
         try:

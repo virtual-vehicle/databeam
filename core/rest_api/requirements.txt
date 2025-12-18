@@ -6,6 +6,7 @@ Flask
 flask-cors
 flask-login
 werkzeug
+gunicorn
 zipfly
 websockets
 docker

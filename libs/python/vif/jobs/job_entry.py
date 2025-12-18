@@ -1,4 +1,5 @@
 import json
+import traceback
 from datetime import datetime, timezone
 
 from vif.logger.logger import LoggerMixin
@@ -23,14 +24,14 @@ class JobEntry(LoggerMixin):
                 reply = self._cm.request(Key(self._db_id, 'c', 'job_submit'), message)
                 self._id = json.loads(reply)['id']
             except Exception as e:
-                self.logger.error(f"Error during job update/submit: {type(e).__name__}: {e}")
+                self.logger.error(f"Error during job update/submit: {type(e).__name__}: {e}\n{traceback.format_exc()}")
         else:
             # job is already active, update job
             try:
                 message = json.dumps(self.get_dict())
                 _ = self._cm.request(Key(self._db_id, 'c', 'job_update'), message)
             except Exception as e:
-                self.logger.error(f"Error during job update: {type(e).__name__}: {e}")
+                self.logger.error(f"Error during job update: {type(e).__name__}: {e}\n{traceback.format_exc()}")
 
         # if we have sent the job with the done flag we can reset this job as the job server will clear the job
         if self._done:
@@ -87,7 +88,7 @@ class TimeJob(JobEntry):
     def update_time(self):
         time_ns = datetime.now(timezone.utc)
         time_str = time_ns.strftime("%H:%M:%S")
-        self.set_data("time_ns", int(time_ns.timestamp() * 1000000000))
+        self.set_data("time_ns", int(time_ns.timestamp() * 1_000_000) * 1000)
         self.set_data("time_str", time_str)
 
 

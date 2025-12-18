@@ -763,21 +763,19 @@ h3 {
 }
 
 .control-buttons {
-  width: 100%;
-  margin-bottom: 3px;
+  width: fit-content;
   font-size: 16px;
-  background-color: var(--btn_bg_color);
+  background-color: whitesmoke;
   color: var(--btn_font_color);
-  /*border: 2px solid lightgray;*/
-  border: none;
+  border: 2px solid gray;
   border-radius: 5px;
-  padding: 15px 32px;
+  padding: 5px;
   text-align: center;
   text-decoration: none;
   display: inline-block;
   font-size: 16px;
   transition-duration: 0.2s;
-  outline:none;
+  outline: none;
   cursor: pointer;
 }
 

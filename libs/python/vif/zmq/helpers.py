@@ -61,9 +61,9 @@ def msg_available(socket) -> bool:
 
 async def flush_queue(zmq_socket: zmq.asyncio.Socket):
     while zmq_socket.getsockopt(zmq.EVENTS) & zmq.POLLIN:
-        msg = await zmq_socket.recv()
+        _ = await zmq_socket.recv()
 
 
 def flush_queue_sync(zmq_socket: zmq.Socket):
     while zmq_socket.getsockopt(zmq.EVENTS) & zmq.POLLIN:
-        msg = zmq_socket.recv()
+        _ = zmq_socket.recv()

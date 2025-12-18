@@ -207,6 +207,23 @@ class ConfigEntry
     }
   }
 
+  moveArrayElement(index, move_up)
+  {
+    if(!Array.isArray(this.parent))
+    {
+      console.log("updateArray: No array.")
+      return
+    }
+
+    if(move_up && index == 0) return;
+    if(!move_up && index >= (this.parent.length - 1)) return
+
+    let swap_index = index + (move_up ? -1 : 1)
+    let temp = this.parent[swap_index]
+    this.parent[swap_index] = this.parent[index]
+    this.parent[index] = temp
+  }
+
   updateArray(index, value)
   {
     if(!Array.isArray(this.parent))

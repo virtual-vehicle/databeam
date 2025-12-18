@@ -457,7 +457,7 @@ class Controller(LoggerMixin):
                         logger.info('Docker pull initiated')
                     elif message.cmd == SystemControlQueryCmd.SYNC_TIME:
                         sock.send(f"dothetimesync#{message.target_iso_time}".encode())
-                        logger.info(f'time synchronization initiated')
+                        logger.info('time synchronization initiated')
                     else:
                         raise KeyError(f'SystemControlQuery.Command not implemented: {message.cmd.name}')
                     return SystemControlReply(status=Status(error=False)).serialize()

@@ -50,4 +50,4 @@ This is also the place to edit environment variables on a per-module basis.
 | **HOST_NAME_FILE** | Internal path to host-OS hostname. |
 | **DBID_LIST** | Optional: specify comma-separated list of tuples of DataBeam IDs and hostnames.<br>Format: `dbid1/192.168.1.10,dbid2/192.168.1.1`<br>Prefer IPs! Only use local mDNS hostnames if accessing containers run Avahi daemon and are configured to run in network mode `host`.|
 
-<div align="right">(<a href="README.md">back to README</a>)</div>
+<div align="right">(<a href="../README.md">back to README</a>)</div>

@@ -18,17 +18,17 @@ topics = reader.get_topic_names()
 # total number of messages
 count = reader.get_total_message_count()
 # get a numpy structured array with data from a topic
-data = reader.get_data('testtopic')
+data = reader.get_data(topics[0])
 
 # get a dict of numpy structured arrays with data from all topics
 data = reader.get_all_data()
 print(data)
 
-data = reader.get_data('testtopic', start_time_ns=0, num_messages=1000)
+data = reader.get_data(topics[0], start_time_ns=0, num_messages=1000)
 # fetch next block, starting right after the first
-data = reader.get_data('testtopic', start_time_ns=data['ts'][-1] + 1, num_messages=1000)
+data = reader.get_data(topics[0], start_time_ns=data['ts'][-1] + 1, num_messages=1000)
 
-for chunk in reader.get_data_chunked("testtopic", chunk_size_megabytes=1000):
+for chunk in reader.get_data_chunked(topics[0], chunk_size_megabytes=1000):
     print(f'got {chunk.size} messages')
     # --> process data chunk (numpy structured array)!
 

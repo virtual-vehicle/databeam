@@ -10,7 +10,8 @@ import queue
 from vif.data_interface.module_interface import main
 from vif.data_interface.io_module import IOModule
 from vif.data_interface.module_meta_factory import ModuleMetaFactory
-from vif.websockets.websocket_api import WebSocketAPI
+#from vif.websockets.websocket_api import WebSocketAPI
+from vif.websockets.asyncwebsocket_api import AsyncWebSocketAPI
 
 from io_modules.plotter.server import Server
 
@@ -38,7 +39,7 @@ class Plotter(IOModule):
         self._shutdown_queue = queue.Queue()
         self._server: Optional[Server] = None
 
-        self._websocket_api: Optional[WebSocketAPI] = None
+        self._websocket_api: Optional[AsyncWebSocketAPI] = None
 
         self.logger.debug(self.config_handler.config)
 
@@ -83,7 +84,7 @@ class Plotter(IOModule):
                 self._server = None
 
             if self._server is None:
-                self._websocket_api = WebSocketAPI(ip="0.0.0.0", port=config['port'] + 1)
+                self._websocket_api = AsyncWebSocketAPI(ip="0.0.0.0", port=config['port'] + 1)
                 self._websocket_api.start_server()
                 #self.live_data_receiver.request_live_data(list(m_dict.keys()), list(m_dict.values()),
                 #                                          data_callback=self._live_data_cb)

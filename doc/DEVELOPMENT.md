@@ -1,5 +1,10 @@
 ## Development
 
+### TLDR
+
+For a quick spin, follow the **<a href="QUICKSTART.md">Quickstart document</a>**.
+
+
 ### Install Dependencies
 ```
 sudo apt-get install git git-lfs make
@@ -16,6 +21,7 @@ Install all requirements and initialize development environment with:
 ```
 git clone https://github.com/virtual-vehicle/databeam.git
 cd databeam
+
 make develop
 ```
 This will take some time to install and compile the necessary dependencies for debugging.
@@ -94,4 +100,4 @@ make run
 ```
 Navigate to http://localhost:5000 to explore the Web-GUI.
 
-<div align="right">(<a href="README.md">back to README</a>)</div>
+<div align="right">(<a href="../README.md">back to README</a>)</div>

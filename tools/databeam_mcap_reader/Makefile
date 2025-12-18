@@ -8,7 +8,7 @@ CONAN_BIN := $(shell if [ -f "/root/.local/bin/conan" ]; then echo "/root/.local
 DEV_DEBUG ?= 1
 
 BUILD_IMAGE := quay.io/pypa/manylinux_2_34_x86_64
-BUILD_VERSIONS ?= cp310-cp310 cp311-cp311 cp312-cp312 cp313-cp313
+BUILD_VERSIONS ?= cp310-cp310 cp311-cp311 cp312-cp312 cp313-cp313 cp314-cp314
 
 # Default target
 .DEFAULT_GOAL := help

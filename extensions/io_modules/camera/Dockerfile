@@ -5,7 +5,10 @@ FROM ${BUILD_IMAGE} AS build-image
 ARG MODULE_NAME=camera
 
 # update and install dependencies
-RUN apt-get install -y --no-install-recommends unzip git autoconf automake libtool
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends unzip git autoconf automake libtool
 
 # build mp4fpsmod
 RUN git clone https://github.com/nu774/mp4fpsmod.git /mp4fpsmod
@@ -14,16 +17,20 @@ RUN /mp4fpsmod/bootstrap.sh
 RUN /mp4fpsmod/configure && make -j6 && strip mp4fpsmod
 RUN make install
 
-COPY ./deploy/requirements_core.txt .
-COPY ./deploy/requirements_module.txt .
-COPY ./extensions/io_modules/${MODULE_NAME}/requirements.txt .
-RUN pip install -r requirements_core.txt -r requirements_module.txt -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=bind,source=./deploy/requirements_core.txt,target=/tmp/requirements_core.txt \
+    --mount=type=bind,source=./deploy/requirements_module.txt,target=/tmp/requirements_module.txt \
+    --mount=type=bind,source=./extensions/io_modules/${MODULE_NAME}/requirements.txt,target=/tmp/requirements.txt \
+    pip install -r /tmp/requirements_core.txt -r /tmp/requirements_module.txt -r /tmp/requirements.txt
 
 
 FROM ${DEPLOY_IMAGE} AS deploy-image
 ARG MODULE_NAME=camera
 
-RUN apt-get install -y --no-install-recommends python3-opencv ffmpeg libsm6 libxext6 gpac
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends python3-opencv ffmpeg libsm6 libxext6 gpac
 
 COPY --from=build-image /opt/venv /opt/venv
 COPY --from=build-image /usr/local/bin/mp4fpsmod /usr/local/bin/mp4fpsmod

@@ -155,9 +155,7 @@ class CaptureProcess(LoggerMixin, multiprocessing.Process):
                     cap_logger.error('received None')
                     continue
 
-                time_ns = raw[0]
-                data = raw[1]
-                schema_idx = raw[2]
+                time_ns, data, schema_idx = raw
 
                 assert isinstance(data, dict)
                 try:
